@@ -14,6 +14,7 @@ import { SolutionBoxAccountService } from "./solution-box-account.service";
 import { PolytechClient } from "./polytech-client";
 import { AirPortalClient, AIR_COMPROBANTES_URL } from "./air-portal-client";
 import { nodoNumbers } from "./order-tracking";
+import { parseHtmlTables, stripTags } from "./html-table";
 
 /**
  * PRUEBA EN MODO LECTURA (facturas y remitos desde los portales).
@@ -240,6 +241,47 @@ export class OrderDocumentsProbe {
     }
   }
 
+  /** Cómo pide los datos el visor de New Bytes (createPDF) y qué responde la API de lio.red (solo claves). */
+  private async nbViewerData(url: unknown): Promise<Record<string, unknown>> {
+    try {
+      if (typeof url !== "string" || !url) return { error: "sin url" };
+      const page = new URL(url);
+      const parts = page.pathname.split("/").filter(Boolean); // voucher, F, id, token
+      const [, kind, id, token] = parts;
+      const html = await fetch(page).then((r) => r.text());
+      const srcs = [...new Set([...html.matchAll(/<script\b[^>]*src="([^"]+)"/gi)].map((m) => m[1]))].slice(0, 12);
+      const code: string[] = [];
+      for (const src of srcs) {
+        const js = await fetch(new URL(src, page)).then((r) => r.text()).catch(() => "");
+        code.push(...this.snippets(js, ["createPDF:function", "$axios.$get", "$axios.get", "$get(\""], 2));
+        if (code.length > 8) break;
+      }
+      const api = "https://ms-comprobantes.lio.red/v2";
+      const guesses = [`${api}/voucher/${kind}/${id}/${token}`, `${api}/vouchers/${kind}/${id}/${token}`, `${api}/voucher/${id}/${token}`, `${api}/comprobantes/${kind}/${id}/${token}`];
+      const tries: string[] = [];
+      for (const g of guesses) {
+        const r = await fetch(g, { headers: { Accept: "application/json" } }).catch(() => null);
+        if (!r) {
+          tries.push(`${g.replace(token, "…")} → error`);
+          continue;
+        }
+        const body = await r.text();
+        let keys = "";
+        try {
+          const j = JSON.parse(body) as Record<string, unknown>;
+          const d = (j.data ?? j) as Record<string, unknown>;
+          keys = `${Object.keys(j).join(",")} / data: ${Object.keys(d).join(",")} / cabecera: ${Object.keys((d.cabecera ?? {}) as object).join(",")} / recursos: ${Object.keys((d.recursos ?? {}) as object).join(",")}`;
+        } catch {
+          keys = body.slice(0, 80).replace(/\s+/g, " ");
+        }
+        tries.push(`${g.replace(token, "…")} → ${r.status} ${r.headers.get("content-type") ?? ""} ${keys}`.slice(0, 700));
+      }
+      return { code: code.slice(0, 8), tries };
+    } catch (err) {
+      return { error: (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    }
+  }
+
   private async airViewerCode(creds: Record<string, string>): Promise<string[]> {
     try {
       const api = await AirPortalClient.login(creds);
@@ -367,6 +409,7 @@ export class OrderDocumentsProbe {
           ejemploFacturaEnPedidos: [...ord.orders, ...pur.orders].map((o) => o.invoice).filter((x) => x && String(x).trim() && String(x).trim() !== "-").slice(0, 6),
           pedidosNodoEnPortal: [...ord.orders, ...pur.orders].filter((o) => orderOf([o.orderNumber, o.webOrderNumber, o.albNumber])).length,
           visor: await this.nbViewerCode(vouchers[0]?.voucherUrl),
+          visorDatos: await this.nbViewerData(vouchers[0]?.voucherUrl),
         };
         for (const r of [...ord.orders, ...pur.orders]) {
           const nodo = orderOf([r.orderNumber, r.webOrderNumber, r.albNumber]);
@@ -456,15 +499,40 @@ export class OrderDocumentsProbe {
         break;
       }
       case "AIR": {
-        const acc = await this.air.getAccount(tenantId, creds);
-        report.comprobantesPortal = acc.invoices.length;
-        const headers = keysOf(acc.invoices[0]).filter((k) => k !== "_links");
-        report.estructura = { visor: await this.airViewerCode(creds), avisos: acc.warnings, columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
-        for (const r of acc.invoices.filter((x) => x._links?.length).slice(0, PER_PROVIDER_DOCS)) {
-          const href = (r._links ?? [])[0].href;
-          cands.push({ kind: "factura", link: null, label: `muestra ${headers.slice(0, 3).map((h) => String(r[h] ?? "")).join(" ")}`.slice(0, 80), fetch: async () => toBuffer(await this.air.getDocument(creds, href)) });
+        const api = await AirPortalClient.login(creds);
+        const from = new Date(Date.now() - ORDER_DAYS * 86_400_000).toISOString().slice(0, 10);
+        const to = new Date().toISOString().slice(0, 10);
+        const list = async (q: string) => api.getText(`${AIR_COMPROBANTES_URL}?q=${q}&qd=${from}&qh=${to}`);
+        const [fvHtml, resumenHtml] = await Promise.all([list("FV"), list("T").catch(() => "")]);
+        const codes = (html: string) => [...new Set([...html.matchAll(/nrocompro="([^"]+)"/gi)].map((m) => m[1]))];
+        const fv = codes(fvHtml).filter((c) => /FV/i.test(c));
+        const tables = parseHtmlTables(fvHtml);
+        const resumenTables = parseHtmlTables(resumenHtml);
+        const nodoAir = orders.map((o) => o.invidOrderNumber).filter(Boolean).slice(0, 4);
+        let items = "";
+        if (fv[0]) items = await api.getText(`${AIR_COMPROBANTES_URL}?q=r&nrocompro=${encodeURIComponent(fv[0])}`).catch((e: Error) => `error ${e.message}`);
+        report.comprobantesPortal = fv.length;
+        report.estructura = {
+          fvChars: fvHtml.length,
+          fvCodigos: fv.slice(0, 4),
+          fvColumnas: tables.map((t) => t.headers).slice(0, 2),
+          fvFila: tables[0]?.rows?.[0] ?? null,
+          resumenColumnas: resumenTables.map((t) => t.headers).slice(0, 2),
+          resumenCodigos: codes(resumenHtml).slice(0, 8),
+          nodoNumeros: nodoAir,
+          nodoEnResumen: orders.filter((o) => o.invidOrderNumber && resumenHtml.includes(o.invidOrderNumber)).length,
+          nodoEnFacturas: orders.filter((o) => o.invidOrderNumber && fvHtml.includes(o.invidOrderNumber)).length,
+          itemsTexto: stripTags(items).replace(/\s+/g, " ").slice(0, 700),
+          itemsCodigos: codes(items).slice(0, 8),
+        };
+        for (const code of fv.slice(0, PER_PROVIDER_DOCS)) {
+          cands.push({ kind: "factura", link: null, label: `muestra ${code}`, fetch: async () => (await api.getBuffer(`https://www.air-intra.com/2025/pdf/index.php?q=${encodeURIComponent(code)}`)).buffer });
         }
-        report.nota = "el portal no une la factura al pedido: se busca el número de pedido en el PDF";
+        const rv = codes(resumenHtml).filter((c) => /RV/i.test(c));
+        for (const code of rv.slice(0, 1)) {
+          cands.push({ kind: "remito", link: null, label: `muestra ${code}`, fetch: async () => (await api.getBuffer(`https://www.air-intra.com/2025/pdf/index.php?q=${encodeURIComponent(code)}`)).buffer });
+        }
+        report.nota = "se prueba la consulta FV/RV del portal y su visor de PDF";
         break;
       }
       case "POLYTECH": {
