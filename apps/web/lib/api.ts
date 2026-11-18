@@ -11,7 +11,7 @@ import type {
   CatalogApiAddonState,
   CatalogApiOverview,
   CatalogApiScope,
-  CatalogApiWebhookEvent,
+  ApiWebhookEvent,
   DeliveryView,
   WebhookView,
 } from "./catalog-api";
@@ -4921,9 +4921,9 @@ export const catalogApiAdmin = {
   usage: (id: string, days = 30) =>
     api.get<{ days: { day: string; requests: number; errors: number }[] }>(`/my/catalog-api/clients/${id}/usage`, { params: { days } }),
   webhooks: (clientId: string) => api.get<{ webhooks: WebhookView[] }>(`/my/catalog-api/clients/${clientId}/webhooks`),
-  createWebhook: (clientId: string, data: { url: string; events: CatalogApiWebhookEvent[] }) =>
+  createWebhook: (clientId: string, data: { url: string; events: ApiWebhookEvent[] }) =>
     api.post<{ webhook: WebhookView; signingSecret: string }>(`/my/catalog-api/clients/${clientId}/webhooks`, data),
-  updateWebhook: (id: string, data: { url?: string; events?: CatalogApiWebhookEvent[]; active?: boolean }) =>
+  updateWebhook: (id: string, data: { url?: string; events?: ApiWebhookEvent[]; active?: boolean }) =>
     api.patch<{ webhook: WebhookView }>(`/my/catalog-api/webhooks/${id}`, data),
   deleteWebhook: (id: string) => api.delete<{ id: string }>(`/my/catalog-api/webhooks/${id}`),
   testWebhook: (id: string) => api.post<{ delivery: DeliveryView }>(`/my/catalog-api/webhooks/${id}/test`),

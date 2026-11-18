@@ -164,7 +164,7 @@ export default function ClientCard({
               </>
             )}
 
-            {tab === "webhooks" && <WebhooksPanel clientId={client.id} readOnly={readOnly} onMessage={onMessage} />}
+            {tab === "webhooks" && <WebhooksPanel clientId={client.id} readOnly={readOnly} ordersEnabled={!!ordersAvailable && client.scopes.includes("orders:read")} onMessage={onMessage} />}
 
             {tab === "usage" && (
               <div>

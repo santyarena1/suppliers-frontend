@@ -8,6 +8,7 @@ import AddonCard from "@/components/catalog-api/AddonCard";
 import CatalogApiShowcase from "@/components/catalog-api/CatalogApiShowcase";
 import ClientCard from "@/components/catalog-api/ClientCard";
 import CreateClientModal from "@/components/catalog-api/CreateClientModal";
+import OrdersApiCard from "@/components/catalog-api/OrdersApiCard";
 import QuickStart from "@/components/catalog-api/QuickStart";
 import { SecretReveal, apiMessage, ghostBtn, primaryBtn } from "@/components/catalog-api/ui";
 import { catalogApiAdmin } from "@/lib/api";
@@ -137,6 +138,17 @@ export default function CatalogApiPage() {
 
               {enabled && (
                 <>
+                  {data.ordersAvailable && (
+                    <OrdersApiCard
+                      clients={active}
+                      baseUrl={baseUrl}
+                      canManage={data.canManage}
+                      onChange={replaceClient}
+                      onCreate={() => setCreating(true)}
+                      onMessage={onMessage}
+                    />
+                  )}
+
                   <section className="flex flex-col gap-3">
                     <div className="flex items-end justify-between gap-3">
                       <div>

@@ -51,6 +51,17 @@ export const CATALOG_API_WEBHOOK_EVENT_LABELS: Record<CatalogApiWebhookEvent, st
   "provider.sync_resumed": "Un distribuidor volvió a sincronizar",
 };
 
+/** Avisos de pedidos (solo con el permiso `orders:read`, hoy solo The Gamer Shop). */
+export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado"] as const;
+export type OrderWebhookEvent = (typeof ORDER_WEBHOOK_EVENTS)[number];
+export const ORDER_WEBHOOK_EVENT_LABELS: Record<OrderWebhookEvent, string> = {
+  "pedido.creado": "Entra un pedido nuevo",
+  "pedido.actualizado": "Cambia un pedido (estado, seguimiento, importes)",
+  "pedido.cancelado": "Se anula un pedido",
+  "pedido.facturado": "El distribuidor factura un pedido",
+};
+export type ApiWebhookEvent = CatalogApiWebhookEvent | OrderWebhookEvent;
+
 export type CatalogApiView = "offers" | "products";
 export type CatalogApiRounding = "none" | "0.01" | "1" | "10" | "99";
 export type CatalogApiCurrency = "USD" | "ARS";
@@ -158,7 +169,7 @@ export interface DeliveryView {
 export interface WebhookView {
   id: string;
   url: string;
-  events: CatalogApiWebhookEvent[];
+  events: ApiWebhookEvent[];
   active: boolean;
   consecutiveFailures: number;
   disabledAt: string | null;

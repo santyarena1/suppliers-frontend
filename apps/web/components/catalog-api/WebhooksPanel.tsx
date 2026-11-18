@@ -6,13 +6,19 @@ import { catalogApiAdmin } from "@/lib/api";
 import {
   CATALOG_API_WEBHOOK_EVENTS,
   CATALOG_API_WEBHOOK_EVENT_LABELS,
-  type CatalogApiWebhookEvent,
+  ORDER_WEBHOOK_EVENTS,
+  ORDER_WEBHOOK_EVENT_LABELS,
+  type ApiWebhookEvent,
   type DeliveryView,
   type WebhookView,
 } from "@/lib/catalog-api";
 import { Field, SecretReveal, StatusPill, apiMessage, dangerBtn, fmtAgo, fmtDateTime, fmtIn, ghostBtn, inputClass, primaryBtn } from "./ui";
 
-const DEFAULT_EVENTS: CatalogApiWebhookEvent[] = ["offer.created", "offer.updated", "offer.removed"];
+const DEFAULT_EVENTS: ApiWebhookEvent[] = ["offer.created", "offer.updated", "offer.removed"];
+
+function eventLabel(ev: ApiWebhookEvent): string {
+  return (ORDER_WEBHOOK_EVENT_LABELS as Record<string, string>)[ev] ?? (CATALOG_API_WEBHOOK_EVENT_LABELS as Record<string, string>)[ev] ?? ev;
+}
 
 function validUrl(url: string): string | null {
   try {
@@ -28,17 +34,21 @@ function validUrl(url: string): string | null {
 export default function WebhooksPanel({
   clientId,
   readOnly,
+  ordersEnabled = false,
   onMessage,
 }: {
   clientId: string;
   readOnly: boolean;
+  /** La key tiene `orders:read` (The Gamer Shop): se ofrecen los avisos de pedidos. */
+  ordersEnabled?: boolean;
   onMessage: (ok: boolean, text: string) => void;
 }) {
+  const initialEvents: ApiWebhookEvent[] = ordersEnabled ? [...ORDER_WEBHOOK_EVENTS] : DEFAULT_EVENTS;
   const [hooks, setHooks] = useState<WebhookView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
-  const [events, setEvents] = useState<CatalogApiWebhookEvent[]>(DEFAULT_EVENTS);
+  const [events, setEvents] = useState<ApiWebhookEvent[]>(initialEvents);
   const [busy, setBusy] = useState<string | null>(null);
   const [secret, setSecret] = useState<{ title: string; value: string } | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -69,7 +79,7 @@ export default function WebhooksPanel({
       setSecret({ title: "Webhook creado", value: res.data.signingSecret });
       setAdding(false);
       setUrl("");
-      setEvents(DEFAULT_EVENTS);
+      setEvents(initialEvents);
     } catch (err) {
       onMessage(false, apiMessage(err, "No se pudo crear el webhook"));
     } finally {
@@ -117,24 +127,32 @@ export default function WebhooksPanel({
               autoFocus
             />
           </Field>
-          <Field label="Eventos">
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {CATALOG_API_WEBHOOK_EVENTS.map((ev) => (
-                <label key={ev} className="flex items-start gap-2 rounded-md border border-surface-800 px-2.5 py-2 cursor-pointer hover:border-surface-600">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 accent-brand-500"
-                    checked={events.includes(ev)}
-                    onChange={() => setEvents((prev) => (prev.includes(ev) ? prev.filter((x) => x !== ev) : [...prev, ev]))}
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-xs text-surface-100">{CATALOG_API_WEBHOOK_EVENT_LABELS[ev]}</span>
-                    <code className="text-[10px] text-surface-500">{ev}</code>
-                  </span>
-                </label>
-              ))}
-            </div>
-          </Field>
+          {(ordersEnabled
+            ? [
+                { title: "Pedidos", list: ORDER_WEBHOOK_EVENTS as readonly ApiWebhookEvent[] },
+                { title: "Catálogo", list: CATALOG_API_WEBHOOK_EVENTS as readonly ApiWebhookEvent[] },
+              ]
+            : [{ title: "Eventos", list: CATALOG_API_WEBHOOK_EVENTS as readonly ApiWebhookEvent[] }]
+          ).map((group) => (
+            <Field key={group.title} label={group.title}>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {group.list.map((ev) => (
+                  <label key={ev} className="flex items-start gap-2 rounded-md border border-surface-800 px-2.5 py-2 cursor-pointer hover:border-surface-600">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-brand-500"
+                      checked={events.includes(ev)}
+                      onChange={() => setEvents((prev) => (prev.includes(ev) ? prev.filter((x) => x !== ev) : [...prev, ev]))}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs text-surface-100">{eventLabel(ev)}</span>
+                      <code className="text-[10px] text-surface-500">{ev}</code>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+          ))}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setAdding(false)} className={ghostBtn}>
               Cancelar
@@ -177,6 +195,7 @@ export default function WebhooksPanel({
                   <code className="truncate text-xs text-surface-200">{h.url}</code>
                 </div>
                 <p className="mt-1 text-[11px] text-surface-500">
+                  {h.events.some((e) => e.startsWith("pedido.")) && "Pedidos · "}
                   {h.events.length} {h.events.length === 1 ? "evento" : "eventos"} · última entrega{" "}
                   {h.lastDelivery ? `${fmtAgo(h.lastDelivery.createdAt)} (${h.lastDelivery.lastStatusCode ?? h.lastDelivery.status})` : "nunca"}
                 </p>
