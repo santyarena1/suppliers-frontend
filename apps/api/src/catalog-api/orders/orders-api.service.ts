@@ -37,7 +37,7 @@ const MAX_PAGE = 100;
  * Versión del armado del pedido. Al sumar campos (2: facturas y remitos), el
  * hash de cada pedido se recalcula una vez sin avisar: no cambió el pedido.
  */
-export const PAYLOAD_SCHEMA = 3;
+export const PAYLOAD_SCHEMA = 4;
 
 const DOCUMENT_SELECT = {
   id: true,
@@ -57,6 +57,8 @@ const DOCUMENT_SELECT = {
   origen: true,
   assetId: true,
   generated: true,
+  lines: true,
+  scheme: true,
   createdAt: true,
 } satisfies Prisma.ProviderOrderDocumentSelect;
 

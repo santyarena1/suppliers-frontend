@@ -19,6 +19,7 @@ export interface NbVoucherData {
   totales?: Record<string, unknown>;
   detalle?: Record<string, unknown>[];
   cliente?: Record<string, unknown>;
+  kits?: Record<string, unknown>[];
   recursos?: Record<string, unknown>;
 }
 

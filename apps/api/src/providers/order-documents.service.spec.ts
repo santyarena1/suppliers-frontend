@@ -89,9 +89,9 @@ describe("facturas y remitos desde los portales", () => {
     const { service, docs, assets, solutionBox } = setup();
     const res = await service.sync("tgs", new Date("2026-11-18T12:00:00Z"));
     expect(res).toEqual([
-      { provider: "ELIT", candidates: 4, saved: 4, errors: 0, linked: 3 },
-      { provider: "SOLUTION_BOX", candidates: 1, saved: 0, errors: 1, linked: 0 },
-      { provider: "NEW_BYTES", candidates: 1, saved: 1, errors: 0, linked: 1 },
+      { provider: "ELIT", candidates: 4, saved: 4, errors: 0, linked: 3, lines: 0 },
+      { provider: "SOLUTION_BOX", candidates: 1, saved: 0, errors: 1, linked: 0, lines: 0 },
+      { provider: "NEW_BYTES", candidates: 1, saved: 1, errors: 0, linked: 1, lines: 0 },
     ]);
     const elit = docs.filter((d) => d.provider === "ELIT");
     expect(elit.map((d) => [d.orderId, d.kind, d.portalNumber, d.link])).toEqual([

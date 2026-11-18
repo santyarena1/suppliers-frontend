@@ -7,7 +7,8 @@ import { CredentialsService } from "../credentials/credentials.service";
 import type { FiscalData } from "../orders-api/arca-invoice";
 import { DOCUMENT_PROVIDERS } from "../orders-api/document-providers";
 import { analyzeInvoicePdf } from "../orders-api/invoice-analysis";
-import { addLine, matchByLines, orderLines, parseAirItems, parseDay, type Lines, type OrderLines } from "../orders-api/invoice-match";
+import { addLine, IGNORED_CODES, matchByLines, orderLines, parseAirItems, parseDay, type Lines, type OrderLines } from "../orders-api/invoice-match";
+import { airInvoiceLines, elitInvoiceLines, nbInvoiceLines, type InvoiceLines } from "../orders-api/invoice-lines";
 import { MAX_PDF_BYTES } from "../orders-api/invoice-pdf";
 import { PrismaService } from "../prisma/prisma.service";
 import { TgsAccessService } from "../tgs/tgs.access";
@@ -58,7 +59,12 @@ interface Fetched {
   /** Pedido encontrado al bajar el comprobante (unión por productos). */
   orderId?: string | null;
   link?: string | null;
+  /** Renglones reales, si ya se leyeron al bajar el comprobante. */
+  lines?: InvoiceLines | null;
 }
+
+/** Texto del PDF (se lee solo si hace falta). */
+type PdfText = () => Promise<string | null>;
 
 interface Candidate {
   /** Pedido de NODO, si el portal lo dice. */
@@ -70,6 +76,8 @@ interface Candidate {
   /** Cómo se unió al pedido. */
   link: string | null;
   fetch: () => Promise<Fetched>;
+  /** Renglones reales facturados (también para completar los ya guardados). */
+  lines?: (pdfText: PdfText) => Promise<InvoiceLines | null>;
 }
 
 type OrderRef = {
@@ -87,6 +95,8 @@ export interface SyncResult {
   saved: number;
   errors: number;
   linked: number;
+  /** Comprobantes ya guardados a los que se les completaron los renglones. */
+  lines: number;
 }
 
 async function toBuffer(file: StreamableFile): Promise<Buffer> {
@@ -107,6 +117,19 @@ export function kindFromForm(form: string | null | undefined): DocumentKind {
 }
 
 const isFiscalForm = (form: string | null | undefined) => /factura|cr[eé]dito|d[eé]bito/i.test(String(form ?? ""));
+
+function linkLabel(how: "exacto" | "parcial" | null): string | null {
+  return how === "exacto" ? "mismos productos y cantidades" : how === "parcial" ? "factura parcial del pedido" : null;
+}
+
+/** Columnas de los renglones (lo que no se pudo leer queda null, pero queda anotado que se intentó). */
+function linesData(lines: InvoiceLines | null) {
+  return {
+    lines: lines?.renglones.length ? (lines.renglones as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+    scheme: lines?.esquema ? (lines.esquema as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+    linesFetchedAt: new Date(),
+  };
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let t: NodeJS.Timeout | undefined;
@@ -156,14 +179,21 @@ export class OrderDocumentsService {
         if (budget <= 0) break;
         const creds = await this.credentialsFor(tenantId, provider);
         if (!creds) continue;
-        const res: SyncResult = { provider, candidates: 0, saved: 0, errors: 0, linked: 0 };
+        const res: SyncResult = { provider, candidates: 0, saved: 0, errors: 0, linked: 0, lines: 0 };
         try {
           const list = orders.filter((o) => o.provider === provider);
           const cands = await withTimeout(this.candidates(provider, tenantId, creds, list, since), 4 * 60_000);
           res.candidates = cands.length;
           const pending = await this.pending(tenantId, provider, cands);
           // Un tope por distribuidor: la historia de uno no frena al resto.
-          for (const c of pending.slice(0, Math.min(budget, PER_PROVIDER_PER_RUN))) {
+          let left = Math.min(budget, PER_PROVIDER_PER_RUN);
+          for (const item of pending.lines) {
+            if (left <= 0) break;
+            left--;
+            budget--;
+            if (await this.fillLines(item)) res.lines++;
+          }
+          for (const c of pending.fetch.slice(0, Math.max(0, left))) {
             budget--;
             const r = await this.store(tenantId, provider, c);
             if (r === "error") res.errors++;
@@ -177,8 +207,8 @@ export class OrderDocumentsService {
           this.log.warn(`Facturas ${provider}: ${err instanceof Error ? err.message : String(err)}`);
         }
         out.push(res);
-        if (res.saved || res.errors) {
-          this.log.log(`Facturas ${provider}: ${res.saved} guardados (${res.linked} unidos a un pedido), ${res.errors} con error, ${res.candidates} en el portal`);
+        if (res.saved || res.errors || res.lines) {
+          this.log.log(`Facturas ${provider}: ${res.saved} guardados (${res.linked} unidos a un pedido), ${res.errors} con error, ${res.lines} con renglones completados, ${res.candidates} en el portal`);
         }
       }
       return out;
@@ -204,6 +234,15 @@ export class OrderDocumentsService {
         // Qué pedido de NODO tiene cada factura (la nota de venta trae el número = movimiento de cta. cte.).
         const orderOfInvoice = new Map<string, string>();
         const orderOfRemito = new Map<string, string>();
+        const noteOfInvoice = new Map<string, (typeof acc.orders)[number]>();
+        for (const n of acc.orders) if (digits(n.invoiceNumber)) noteOfInvoice.set(digits(n.invoiceNumber), n);
+        // Renglones de la factura: los de su nota de venta (con el kit del esquema y sus hijos).
+        const elitLines = (invoiceNumber: string) => async (): Promise<InvoiceLines | null> => {
+          const note = noteOfInvoice.get(digits(invoiceNumber));
+          if (!note) return null;
+          const items = note.items?.length ? note.items : (await this.elit.getSaleNote(tenantId, creds, note.orderNumber)).items;
+          return items?.length ? elitInvoiceLines(items) : null;
+        };
         for (const n of acc.orders) {
           const order = orderOf([n.internalNumber, n.orderNumber]);
           if (!order) continue;
@@ -232,6 +271,7 @@ export class OrderDocumentsService {
             portalNumber: m.number,
             link: byInvoice ? "nota de venta → factura" : byRemito ? "remito → comprobante" : null,
             fetch: async () => ({ pdf: await toBuffer(await this.elit.getDocument(creds, { form: m.form, number: m.number })) }),
+            lines: elitLines(m.number),
           });
         }
         // Una factura de un pedido de NODO que todavía no aparece en la cuenta corriente.
@@ -246,6 +286,7 @@ export class OrderDocumentsService {
             portalNumber: n.invoiceNumber,
             link: "nota de venta → factura",
             fetch: async () => ({ pdf: await toBuffer(await this.elit.getDocument(creds, { form: "FACTURA A", number: n.invoiceNumber })) }),
+            lines: elitLines(n.invoiceNumber),
           });
         }
         break;
@@ -273,6 +314,10 @@ export class OrderDocumentsService {
           const label = String(v.invoiceLabel ?? v.invoiceType ?? "");
           if (!v.voucherUrl || v.voucherId == null || !isFiscalForm(label) || !recent(v.invoiceDate)) continue;
           const voucherUrl = String(v.voucherUrl);
+          const nbLinesOf = async () => {
+            const data = await fetchNbVoucher(voucherUrl);
+            return nbInvoiceLines(data.detalle, data.kits, nbFiscal(data).fiscal.moneda);
+          };
           out.push({
             orderId: null,
             kind: kindFromForm(label),
@@ -282,15 +327,17 @@ export class OrderDocumentsService {
             fetch: async () => {
               const data = await fetchNbVoucher(voucherUrl);
               const { fiscal, qr } = nbFiscal(data);
-              const m = matchByLines({ lines: nbLines(data), date: parseDay(fiscal.fecha_emision) }, byLines);
+              const m = matchByLines({ lines: nbLines(data), date: parseDay(fiscal.fecha_emision) }, byLines, { ignore: IGNORED_CODES.NEW_BYTES });
               return {
                 pdf: await renderNbVoucherPdf(data, fiscal),
                 fiscal: { data: fiscal, origen: qr ? "qr" : "texto" },
                 generated: true,
                 orderId: m.orderId,
-                link: m.orderId ? "mismos productos y cantidades" : null,
+                link: linkLabel(m.how),
+                lines: this.noteIgnored("NEW_BYTES", nbInvoiceLines(data.detalle, data.kits, fiscal.moneda)),
               };
             },
+            lines: nbLinesOf,
           });
         }
         break;
@@ -307,6 +354,8 @@ export class OrderDocumentsService {
           seen.add(code);
           const near = stripTags(html.slice(Math.max(0, (m.index ?? 0) - 400), (m.index ?? 0) + 600));
           const date = parseDay(near);
+          let itemsCache: string | null = null;
+          const itemsText = async () => (itemsCache ??= await api.getText(`${AIR_COMPROBANTES_URL}?q=r&nrocompro=${encodeURIComponent(code)}`).catch(() => ""));
           out.push({
             orderId: null,
             kind: "FACTURA",
@@ -314,12 +363,16 @@ export class OrderDocumentsService {
             portalNumber: code,
             link: null,
             fetch: async () => {
-              const items = await api.getText(`${AIR_COMPROBANTES_URL}?q=r&nrocompro=${encodeURIComponent(code)}`).catch(() => "");
+              const items = await itemsText();
               const lines: Lines = new Map();
               for (const it of parseAirItems(stripTags(items))) addLine(lines, it.code, it.qty);
-              const mt = matchByLines({ lines, date }, byLines);
+              const mt = matchByLines({ lines, date }, byLines, { ignore: IGNORED_CODES.AIR });
               const file = await api.getBuffer(`https://www.air-intra.com/2025/pdf/index.php?q=${encodeURIComponent(code)}`);
-              return { pdf: file.buffer, orderId: mt.orderId, link: mt.orderId ? "mismos productos y cantidades" : null };
+              return { pdf: file.buffer, orderId: mt.orderId, link: linkLabel(mt.how) };
+            },
+            lines: async (pdfText) => {
+              const items = stripTags(await itemsText());
+              return items.trim() ? airInvoiceLines(items, await pdfText()) : null;
             },
           });
         }
@@ -334,15 +387,16 @@ export class OrderDocumentsService {
    * Los que faltan guardar: nuevos, o que fallaron hace más de 6 horas. De paso,
    * une al pedido los ya guardados que ahora el portal sí ata a uno.
    */
-  private async pending(tenantId: string, provider: string, cands: Candidate[]): Promise<Candidate[]> {
-    if (cands.length === 0) return [];
+  private async pending(tenantId: string, provider: string, cands: Candidate[]): Promise<{ fetch: Candidate[]; lines: { c: Candidate; id: string; assetId: string }[] }> {
+    if (cands.length === 0) return { fetch: [], lines: [] };
     const existing = await this.prisma.providerOrderDocument.findMany({
       where: { tenantId, provider, portalRef: { in: cands.map((c) => c.portalRef) } },
-      select: { id: true, portalRef: true, orderId: true, assetId: true, fetchedAt: true },
+      select: { id: true, portalRef: true, orderId: true, assetId: true, fetchedAt: true, linesFetchedAt: true, kind: true },
     });
     const byRef = new Map(existing.map((d) => [d.portalRef, d]));
     const now = Date.now();
     const out: Candidate[] = [];
+    const lines: { c: Candidate; id: string; assetId: string }[] = [];
     for (const c of cands) {
       const d = byRef.get(c.portalRef);
       if (!d) {
@@ -351,8 +405,26 @@ export class OrderDocumentsService {
       }
       if (c.orderId && !d.orderId) await this.prisma.providerOrderDocument.update({ where: { id: d.id }, data: { orderId: c.orderId, link: c.link } });
       if (!d.assetId && (!d.fetchedAt || now - d.fetchedAt.getTime() > RETRY_AFTER_MS)) out.push(c);
+      // Guardado antes de leer renglones: se completan sin volver a bajar el PDF.
+      else if (d.assetId && !d.linesFetchedAt && d.kind !== "REMITO" && c.lines) lines.push({ c, id: d.id, assetId: d.assetId });
     }
-    return out;
+    return { fetch: out, lines };
+  }
+
+  /** Completa los renglones de un comprobante ya guardado (el PDF se lee de NODO, no del portal). */
+  private async fillLines(item: { c: Candidate; id: string; assetId: string }): Promise<boolean> {
+    try {
+      const pdfText: PdfText = async () => {
+        const asset = await this.prisma.storedAsset.findUnique({ where: { id: item.assetId }, select: { data: true } });
+        return asset ? (await analyzeInvoicePdf(Buffer.from(asset.data))).text || null : null;
+      };
+      const lines = await withTimeout(item.c.lines!(pdfText), FETCH_TIMEOUT_MS);
+      await this.prisma.providerOrderDocument.update({ where: { id: item.id }, data: linesData(lines) });
+      return true;
+    } catch (err) {
+      this.log.warn(`Facturas: renglones de ${item.c.portalRef}: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
   }
 
   // ---------- Guardar ----------
@@ -374,6 +446,7 @@ export class OrderDocumentsService {
 
     let f: FiscalData | null = null;
     let origen: string | null = null;
+    let pdfTextValue: string | null = null;
     if (got.fiscal) {
       f = got.fiscal.data;
       origen = got.fiscal.origen;
@@ -385,6 +458,11 @@ export class OrderDocumentsService {
       }
       f = a.fiscal;
       origen = a.origen;
+      pdfTextValue = a.text || null;
+    }
+    let lines: InvoiceLines | null | undefined = got.lines;
+    if (lines === undefined && c.lines && c.kind !== "REMITO") {
+      lines = await withTimeout(c.lines(async () => pdfTextValue), FETCH_TIMEOUT_MS).catch(() => null);
     }
     const remito = c.kind === "REMITO";
     // Un remito no tiene datos fiscales: solo se guarda el PDF.
@@ -414,7 +492,7 @@ export class OrderDocumentsService {
         data: { mimeType: "application/pdf", filename, byteSize: got.pdf.length, data: got.pdf, isPrivate: true, ownerTenantId: tenantId, purpose: "order-document" },
         select: { id: true },
       });
-      const data = { ...fiscal, kind, orderId, link, generated: !!got.generated, assetId: asset.id, sha256, byteSize: got.pdf.length, fetchedAt: new Date(), fetchError: null };
+      const data = { ...fiscal, ...(lines !== undefined ? linesData(lines) : {}), kind, orderId, link, generated: !!got.generated, assetId: asset.id, sha256, byteSize: got.pdf.length, fetchedAt: new Date(), fetchError: null };
       const prev = await tx.providerOrderDocument.findFirst({ where: { tenantId, provider, portalRef: c.portalRef }, select: { id: true, assetId: true, orderId: true } });
       if (prev) {
         await tx.providerOrderDocument.update({ where: { id: prev.id }, data: { ...data, orderId: prev.orderId ?? orderId } });
@@ -424,6 +502,17 @@ export class OrderDocumentsService {
       }
     });
     return orderId ? "linked" : "saved";
+  }
+
+  private noted = new Set<string>();
+  /** Una vez por código: qué es el renglón que se ignora al unir (para confirmar que no es un producto). */
+  private noteIgnored(provider: string, lines: InvoiceLines): InvoiceLines {
+    for (const l of lines.renglones) {
+      if (!(IGNORED_CODES[provider] ?? []).includes(l.codigo) || this.noted.has(provider + l.codigo)) continue;
+      this.noted.add(provider + l.codigo);
+      this.log.log(`Facturas ${provider}: el renglón ${l.codigo} que se ignora al unir es «${l.descripcion ?? "?"}» (${l.cantidad} × ${l.precio_unitario ?? "?"})`);
+    }
+    return lines;
   }
 
   /** Deja anotado el intento fallido. */

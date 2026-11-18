@@ -1340,3 +1340,34 @@ API (`orders:read`, solo la organización habilitada):
   `pdf_generado_por_nodo` (`PAYLOAD_SCHEMA = 3`, hash recalculado sin avisos).
 - `pedido.facturado` de New Bytes y Air: cuando se une una factura con datos fiscales o,
   como antes, cuando el seguimiento muestra la factura.
+**2026-11-18 (c) — renglones reales y armado en esquema.** Revisión con facturas
+reales: cuando el distribuidor arma un pedido en esquema lo factura como un kit
+(Air `42369 «PC ACTUALIZACION»`, Elit `800420 «PC ELIT ATENEA»`) con su propio IVA
+(en general 10,5 %, también la fuente que suelta es 21 %), con precios algo menores
+que el carrito (Air −4,1 % en dólares, Elit −0,5 a −2 %) y muchas veces con otros
+productos (otra fuente, otro monitor, una placa de más). Por eso los `renglones` del
+pedido (carrito de NODO) no sirven como costo real de un pedido en esquema.
+- Cada factura (`/v1/facturas` y `pedido.facturas[]`) suma `renglones[] { codigo,
+  descripcion, cantidad, precio_unitario, iva_porcentaje, impuestos_internos,
+  total_linea, moneda, en_esquema }` tal como los facturó el distribuidor y
+  `esquema { codigo, descripcion, total, iva_porcentaje, impuestos_internos, moneda } | null`.
+  Fuentes (`orders-api/invoice-lines.ts`): Air, el detalle `comprobantes.php?q=r`
+  (precios en pesos) más el PDF (qué renglones se facturan y su % de IVA: lo que está en
+  el detalle y no en el PDF va dentro del kit con el IVA del kit); Elit, la nota de venta
+  de la factura (dólares; los hijos del kit van en el esquema); New Bytes, `detalle` de
+  lio.red (`kitId` marca el kit). Solution Box: `renglones: null`. Lo que no se sabe, null
+  (sin PDF legible en Air, `en_esquema: null`). En Elit los precios de los productos de
+  adentro del kit pueden no sumar exacto el total del kit: para el costo, prorratear
+  `esquema.total`.
+- `pedido.esquema: boolean`: alguna factura vino en esquema → usar los renglones de la factura.
+- Unión por productos (New Bytes, Air, `orders-api/invoice-match.ts`): se ignoran la línea
+  del esquema de Air (42369) y el cargo 102048 de New Bytes; calza el pedido exacto o el
+  único que contiene todos los productos de la factura con igual o más cantidad
+  (`pedido.union`: «mismos productos y cantidades» / «factura parcial del pedido»). Un
+  pedido en esquema con productos cambiados no se une: llega suelto y **AcuStock guarda
+  de su lado a qué pedido corresponde** (NODO no recibe escrituras).
+- Los comprobantes ya guardados completan sus renglones en las próximas vueltas
+  (`ProviderOrderDocument.lines`, `scheme`, `linesFetchedAt`; el PDF se relee de NODO).
+  `PAYLOAD_SCHEMA = 4`, `INVOICE_SCHEMA = 2` (`ApiInvoiceState.schema`): hash
+  recalculado una vez sin avisos. Un comprobante emitido hace más de 7 días que se completa
+  sube de versión sin aviso.

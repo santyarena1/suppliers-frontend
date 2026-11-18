@@ -8,6 +8,7 @@
  */
 import { createHash } from "crypto";
 import { readLineTotal, readUnitNet } from "../orders/offline-order";
+import type { InvoiceLine, InvoiceScheme } from "./invoice-lines";
 
 // ---------- Tipos de entrada ----------
 
@@ -78,6 +79,9 @@ export interface OrderDocumentRow {
   assetId: string | null;
   /** PDF armado por NODO con los datos oficiales (New Bytes). */
   generated?: boolean;
+  /** Renglones reales facturados y el kit del esquema (ver invoice-lines.ts). */
+  lines?: unknown;
+  scheme?: unknown;
   createdAt: Date;
 }
 
@@ -143,6 +147,12 @@ export interface OrderPayload {
   factura: InvoicePayload | null;
   /** Todas las facturas y notas de crédito o débito del pedido, de la más vieja a la más nueva. */
   facturas: InvoicePayload[];
+  /**
+   * Alguna factura del pedido vino armada en esquema: los precios, el IVA y hasta
+   * los productos reales son los de `facturas[].renglones`, no los de `renglones`
+   * del pedido (que son los del carrito de NODO).
+   */
+  esquema: boolean;
   /** El remito del pedido (el primero, si hay varios). */
   remito: DeliveryNotePayload | null;
   remitos: DeliveryNotePayload[];
@@ -178,6 +188,16 @@ export interface InvoicePayload {
   pdf_url: string | null;
   /** El PDF lo armó NODO con los datos oficiales (el distribuidor no publica el original). */
   pdf_generado_por_nodo: boolean;
+  /**
+   * El pedido se armó en esquema: el kit que factura el distribuidor (`PC ACTUALIZACION`
+   * en Air, `PC ELIT ATENEA` en Elit) con su total e IVA. null si no hay esquema.
+   */
+  esquema: InvoiceScheme | null;
+  /**
+   * Los renglones como los facturó el distribuidor (precio, IVA y productos reales,
+   * que en un esquema pueden no ser los del carrito). null si el distribuidor no los da.
+   */
+  renglones: InvoiceLine[] | null;
   /** De dónde salieron los datos: QR de ARCA, texto del PDF, o solo el número que mostró el portal. */
   origen: "qr" | "texto" | "portal";
 }
@@ -565,6 +585,7 @@ export function buildOrderPayload(
     notas: text(o.notes),
     factura: docs.facturas.find((f) => f.clase === "factura") ?? docs.facturas[0] ?? null,
     facturas: docs.facturas,
+    esquema: docs.facturas.some((f) => f.esquema != null),
     remito: docs.remitos[0] ?? null,
     remitos: docs.remitos,
     seguimiento: tracked
@@ -629,6 +650,8 @@ export function documentsPayload(
         cotizacion: null,
         pdf_url: null,
         pdf_generado_por_nodo: false,
+        esquema: null,
+        renglones: null,
         origen: "portal",
       });
     }
@@ -664,6 +687,8 @@ export function invoiceFromDocument(d: OrderDocumentRow, pdfUrl: string | null):
     cotizacion: fiscal ? num(d.cotizacion) : null,
     pdf_url: pdfUrl,
     pdf_generado_por_nodo: !!d.generated,
+    esquema: d.scheme && typeof d.scheme === "object" ? (d.scheme as InvoiceScheme) : null,
+    renglones: Array.isArray(d.lines) && d.lines.length ? (d.lines as InvoiceLine[]) : null,
     origen: fiscal ? (d.origen as "qr" | "texto") : "portal",
   };
 }

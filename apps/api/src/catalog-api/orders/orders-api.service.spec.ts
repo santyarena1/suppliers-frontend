@@ -159,7 +159,7 @@ describe("revisión de pedidos para la API", () => {
     orders[0].updatedAt = new Date("2026-11-16T10:06:00Z");
     await service.refresh("tgs", new Date("2026-11-16T10:07:00Z"));
     expect(events).toHaveLength(0);
-    expect(states.get("a")).toMatchObject({ version: 1, schema: 3 });
+    expect(states.get("a")).toMatchObject({ version: 1, schema: 4 });
   });
 
   it("un intento de compra que falló no se publica ni se numera", async () => {

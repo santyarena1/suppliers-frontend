@@ -3243,6 +3243,8 @@ model ApiInvoiceState {
   tenantId   String
   hash       String
   version    Int      @default(1)
+  /// Versión del armado de la factura (ver PAYLOAD_SCHEMA de pedidos).
+  schema     Int      @default(1)
   changedAt  DateTime
   createdAt  DateTime @default(now())
 
@@ -3277,6 +3279,12 @@ model ProviderOrderDocument {
   link           String?
   /// PDF armado por NODO con los datos oficiales (New Bytes no publica el original).
   generated      Boolean  @default(false)
+  /// Renglones reales facturados (`orders-api/invoice-lines.ts` → InvoiceLine[]).
+  lines          Json?
+  /// Kit del armado en esquema, si lo hay (InvoiceScheme).
+  scheme         Json?
+  /// Cuándo se leyeron los renglones (null = falta leerlos).
+  linesFetchedAt DateTime?
   tipo           String?
   tipoCodigo     Int?
   puntoVenta     Int?

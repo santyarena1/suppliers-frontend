@@ -20,6 +20,8 @@ const MAX_PAGE = 100;
 /** Un comprobante emitido hace más de esto que NODO recién encuentra (historia) no se avisa: se lee con `GET /v1/facturas`. */
 const BACKFILL_SILENT_DAYS = 7;
 const FISCAL_KINDS = ["FACTURA", "NOTA_CREDITO", "NOTA_DEBITO"];
+/** Versión del armado de la factura (2: renglones y esquema). Al subirla, el hash se recalcula sin avisar. */
+export const INVOICE_SCHEMA = 2;
 
 const DOC_SELECT = {
   id: true,
@@ -42,6 +44,8 @@ const DOC_SELECT = {
   origen: true,
   assetId: true,
   generated: true,
+  lines: true,
+  scheme: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ProviderOrderDocumentSelect;
@@ -95,6 +99,7 @@ export class InvoicesApiService {
       const tracker = await this.prisma.apiOrderTracker.findUnique({ where: { tenantId } });
       if (!tracker) return 0;
       const firstRun = tracker.invoicesCheckedUntil == null;
+      if (!firstRun) await this.rebaseline(tenantId, now);
       let since = tracker.invoicesCheckedUntil ? new Date(tracker.invoicesCheckedUntil.getTime() - OVERLAP_MS) : new Date(0);
       let lastSeen = tracker.invoicesCheckedUntil ?? new Date(0);
       let emitted = 0;
@@ -122,16 +127,37 @@ export class InvoicesApiService {
     }
   }
 
+  /** Al subir INVOICE_SCHEMA: recalcula el hash de todas las facturas publicadas, sin avisar. */
+  private async rebaseline(tenantId: string, now: Date) {
+    for (;;) {
+      const old = await this.prisma.apiInvoiceState.findMany({ where: { tenantId, schema: { lt: INVOICE_SCHEMA } }, take: PER_TICK, select: { documentId: true } });
+      if (old.length === 0) return;
+      const docs = await this.prisma.providerOrderDocument.findMany({ where: { tenantId, id: { in: old.map((s) => s.documentId) } }, select: DOC_SELECT });
+      const ctx = await this.context(docs);
+      for (const d of docs) await this.track(d, ctx, { firstRun: false, now });
+      const found = new Set(docs.filter((d) => isFiscalDocument(d)).map((d) => d.id));
+      const gone = old.map((s) => s.documentId).filter((id) => !found.has(id));
+      if (gone.length) await this.prisma.apiInvoiceState.updateMany({ where: { documentId: { in: gone } }, data: { schema: INVOICE_SCHEMA } });
+      if (old.length < PER_TICK) return;
+    }
+  }
+
   private async track(d: Doc, ctx: Ctx, opts: { firstRun: boolean; now: Date }): Promise<number> {
     if (!isFiscalDocument(d)) return 0;
     const hash = hashOf(this.payloadOf(d, ctx, { version: 1, changedAt: opts.now }, true));
     const state = await this.prisma.apiInvoiceState.findUnique({ where: { documentId: d.id } });
+    const issued = d.fechaEmision ? new Date(`${d.fechaEmision}T12:00:00-03:00`) : d.createdAt;
+    const old = opts.now.getTime() - issued.getTime() > BACKFILL_SILENT_DAYS * 86_400_000;
+    if (state && (state.schema ?? 1) < INVOICE_SCHEMA) {
+      // El armado sumó campos: se recalcula sin avisar.
+      await this.prisma.apiInvoiceState.update({ where: { documentId: d.id }, data: { hash, schema: INVOICE_SCHEMA } });
+      return 0;
+    }
     if (state && state.hash === hash) return 0;
     if (!state) {
-      const issued = d.fechaEmision ? new Date(`${d.fechaEmision}T12:00:00-03:00`) : d.createdAt;
-      const silent = opts.firstRun || opts.now.getTime() - issued.getTime() > BACKFILL_SILENT_DAYS * 86_400_000;
+      const silent = opts.firstRun || old;
       const changedAt = silent ? d.updatedAt : opts.now;
-      const create = this.prisma.apiInvoiceState.create({ data: { documentId: d.id, tenantId: d.tenantId, hash, version: 1, changedAt } });
+      const create = this.prisma.apiInvoiceState.create({ data: { documentId: d.id, tenantId: d.tenantId, hash, version: 1, changedAt, schema: INVOICE_SCHEMA } });
       if (silent) {
         await create;
         return 0;
@@ -140,6 +166,11 @@ export class InvoicesApiService {
       return 1;
     }
     const version = state.version + 1;
+    if (old) {
+      // Historia que se completa (renglones, unión a un pedido): nueva versión, sin aviso.
+      await this.prisma.apiInvoiceState.update({ where: { documentId: d.id }, data: { hash, version, changedAt: opts.now } });
+      return 0;
+    }
     await this.prisma.$transaction([
       this.prisma.apiInvoiceState.update({ where: { documentId: d.id }, data: { hash, version, changedAt: opts.now } }),
       this.prisma.apiOrderEvent.create({ data: { tenantId: d.tenantId, orderId: d.id, type: "factura.actualizada", version } }),

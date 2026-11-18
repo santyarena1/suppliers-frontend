@@ -2,11 +2,25 @@
  * Unir una factura a un pedido de NODO por productos y cantidades, para los
  * portales que no dicen de qué pedido es cada factura (New Bytes, Air).
  *
- * Regla (aprobada por el dueño 18/11): se une solo si la factura tiene
- * exactamente los mismos códigos y cantidades que un pedido de NODO hecho
- * entre 30 días antes y 1 día después de la factura, y ese pedido es el único
- * que calza. Con dos candidatos no se une ninguno; sin candidato, tampoco.
+ * Regla (aprobada por el dueño 18/11):
+ * - Se ignoran los renglones que no son productos del pedido: la línea del
+ *   esquema («PC ACTUALIZACION» de Air) y los cargos fijos (`IGNORED_CODES`).
+ * - Calza un pedido de NODO hecho entre 30 días antes y 1 día después de la
+ *   factura que tenga los mismos códigos y cantidades, o que contenga todos los
+ *   productos de la factura con la misma cantidad o más (factura parcial).
+ * - Se une solo si hay un único candidato (primero se busca uno exacto; si no,
+ *   uno que la contenga). Con dos candidatos no se une ninguno.
+ * Un pedido armado en esquema suele facturarse con otros productos: esos no
+ * calzan y llegan sueltos a AcuStock (que guarda de su lado a qué pedido van).
  */
+
+/** Renglones que no son productos (revisión con facturas reales, 18/11). */
+export const IGNORED_CODES: Record<string, string[]> = {
+  // «PC ACTUALIZACION»: el kit del armado en esquema.
+  AIR: ["42369"],
+  // Cargo que aparece en casi todas las facturas y nunca en los pedidos.
+  NEW_BYTES: ["102048"],
+};
 
 export type Lines = Map<string, number>;
 
@@ -53,14 +67,35 @@ export function parseDay(raw: unknown): Date | null {
   return null;
 }
 
-export function matchByLines(invoice: { lines: Lines; date: Date | null }, orders: OrderLines[]): { orderId: string | null; candidates: number } {
-  const cands = orders.filter((o) => {
-    if (!sameLines(invoice.lines, o.lines)) return false;
+/** ¿Todos los productos de la factura están en el pedido con la misma cantidad o más? */
+export function coveredBy(invoice: Lines, order: Lines): boolean {
+  if (invoice.size === 0) return false;
+  for (const [k, v] of invoice) if ((order.get(k) ?? 0) < v) return false;
+  return true;
+}
+
+export function withoutCodes(lines: Lines, codes: Iterable<string>): Lines {
+  const drop = new Set([...codes].map(normCode));
+  return new Map([...lines].filter(([k]) => !drop.has(k)));
+}
+
+export function matchByLines(
+  invoice: { lines: Lines; date: Date | null },
+  orders: OrderLines[],
+  opts: { ignore?: string[] } = {}
+): { orderId: string | null; candidates: number; how: "exacto" | "parcial" | null } {
+  const lines = withoutCodes(invoice.lines, opts.ignore ?? []);
+  const inWindow = orders.filter((o) => {
     if (!invoice.date) return true;
     const diff = invoice.date.getTime() - o.createdAt.getTime();
     return diff >= -DAY && diff <= 30 * DAY;
   });
-  return { orderId: cands.length === 1 ? cands[0].id : null, candidates: cands.length };
+  const exact = inWindow.filter((o) => sameLines(lines, o.lines));
+  if (exact.length === 1) return { orderId: exact[0].id, candidates: 1, how: "exacto" };
+  if (exact.length > 1) return { orderId: null, candidates: exact.length, how: null };
+  const partial = inWindow.filter((o) => coveredBy(lines, o.lines));
+  if (partial.length === 1) return { orderId: partial[0].id, candidates: 1, how: "parcial" };
+  return { orderId: null, candidates: partial.length, how: null };
 }
 
 /**

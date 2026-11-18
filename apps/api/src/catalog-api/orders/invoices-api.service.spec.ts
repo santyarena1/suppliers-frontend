@@ -52,7 +52,8 @@ function setup(initial: Doc[]) {
     tenant: { findMany: jest.fn(async () => [{ providerKey: "ELIT", name: "Elit" }]) },
     apiInvoiceState: {
       findUnique: jest.fn(async (a: { where: { documentId: string } }) => states.get(a.where.documentId) ?? null),
-      findMany: jest.fn(async () => [...states.values()]),
+      findMany: jest.fn(async (a: { where: { schema?: { lt: number } } }) => [...states.values()].filter((s) => !a.where.schema || ((s.schema as number) ?? 1) < a.where.schema.lt)),
+      updateMany: jest.fn(async () => ({ count: 0 })),
       create: jest.fn(async (a: { data: Record<string, unknown> }) => states.set(a.data.documentId as string, { ...a.data })),
       update: jest.fn(async (a: { where: { documentId: string }; data: Record<string, unknown> }) => states.set(a.where.documentId, { ...states.get(a.where.documentId), ...a.data })),
     },
