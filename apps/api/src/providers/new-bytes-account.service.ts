@@ -17,6 +17,26 @@ import {
   type NbOrderRow,
 } from "./new-bytes.mapper";
 import { documentFile } from "./document-file";
+import axios from "axios";
+
+/** Comprobante de New Bytes en lio.red: GET sin credenciales, sin seguir redirecciones, hasta 15 MB. */
+async function fetchPublicVoucher(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+  try {
+    const res = await axios.get<ArrayBuffer>(url, {
+      responseType: "arraybuffer",
+      timeout: 30_000,
+      maxRedirects: 0,
+      maxContentLength: 15 * 1024 * 1024,
+      headers: { Accept: "application/pdf, */*" },
+      validateStatus: (s) => s < 500,
+    });
+    if (res.status >= 300) throw new BadGatewayException(`El comprobante de New Bytes respondió ${res.status}`);
+    return { buffer: Buffer.from(res.data), contentType: String(res.headers["content-type"] || "application/octet-stream").split(";")[0] };
+  } catch (err) {
+    if (err instanceof BadGatewayException) throw err;
+    throw new BadGatewayException(`No se pudo bajar el comprobante de New Bytes: ${(err instanceof Error ? err.message : String(err)).slice(0, 200)}`);
+  }
+}
 
 /**
  * Lectura de la cuenta real de NewBytes (pedidos, órdenes de compra y
@@ -100,6 +120,12 @@ export class NewBytesAccountService {
     const url = found?.voucherUrl;
     if (!url) throw new NotFoundException("Ese comprobante no tiene voucherUrl");
     const parsed = new URL(url, "https://api.nb.com.ar/v1/");
+    // New Bytes publica los comprobantes en su proveedor de facturación (omega.comprobantes.lio.red):
+    // ese link ya es el permiso, así que se pide sin mandarle el token de New Bytes.
+    if (parsed.protocol === "https:" && /(^|\.)comprobantes\.lio\.red$/i.test(parsed.hostname)) {
+      const file = await fetchPublicVoucher(parsed.toString());
+      return documentFile(file.buffer, file.contentType, `comprobante-${voucherId}`);
+    }
     if (!["api.nb.com.ar", "www.nb.com.ar", "static.nb.com.ar"].includes(parsed.hostname)) {
       throw new BadRequestException("URL de comprobante no permitida");
     }

@@ -145,17 +145,29 @@ async function pageImages(page: PdfPage): Promise<PdfImage[]> {
       if (m?.data && m.width && m.height) img = { width: m.width, height: m.height, kind: pdfjs.ImageKind.GRAYSCALE_1BPP, data: m.data };
     }
     const im = img as PdfImage | null;
-    // Un QR es casi cuadrado y no es diminuto.
     if (im && !im.data) out.push({ ...im, width: im.width ?? 0, height: im.height ?? 0 });
-    else if (im?.data && im.width >= 21 && im.height >= 21 && Math.abs(im.width / im.height - 1) < 0.2) out.push(im);
+    else if (im?.data && im.width >= 21 && im.height >= 21) out.push(im);
   }
-  return out;
+  // Primero las casi cuadradas (el QR suelto); después las grandes (una página escaneada con el QR adentro).
+  const square = (i: PdfImage) => Math.abs(i.width / i.height - 1) < 0.2;
+  return [...out.filter(square), ...out.filter((i) => !square(i))];
 }
 
 /** Pasa la imagen de pdf.js a RGBA, con margen blanco y agrandada si es chica, y prueba jsQR. */
 export function decodeQr(img: PdfImage): string | null {
-  const rgba = toRgba(img);
+  let rgba = toRgba(img);
   if (!rgba) return null;
+  // Una página escaneada entera: se achica para que jsQR no tarde una eternidad.
+  const big = Math.max(img.width, img.height);
+  if (big > 1800) {
+    const k = Math.ceil(big / 1800);
+    const w2 = Math.floor(img.width / k);
+    const h2 = Math.floor(img.height / k);
+    const small = new Uint8ClampedArray(w2 * h2 * 4);
+    for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) small.set(rgba.subarray(((y * k) * img.width + x * k) * 4, ((y * k) * img.width + x * k) * 4 + 4), (y * w2 + x) * 4);
+    rgba = small;
+    img = { ...img, width: w2, height: h2, kind: pdfjs.ImageKind.RGBA_32BPP };
+  }
   const scale = Math.max(1, Math.min(8, Math.ceil(240 / Math.max(img.width, img.height))));
   const pad = 4 * scale;
   const w = img.width * scale + pad * 2;
