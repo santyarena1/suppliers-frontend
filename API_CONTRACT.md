@@ -1371,3 +1371,14 @@ pedido (carrito de NODO) no sirven como costo real de un pedido en esquema.
   `PAYLOAD_SCHEMA = 4`, `INVOICE_SCHEMA = 2` (`ApiInvoiceState.schema`): hash
   recalculado una vez sin avisos. Un comprobante emitido hace más de 7 días que se completa
   sube de versión sin aviso.
+
+### [FEATURE] Comprobantes del distribuidor en Pedidos — 2026-11-19
+- **Método**: GET
+- **Ruta**: `/orders` (campo nuevo) · `/orders/:id/documents/:documentId`
+- **Auth**: Bearer token requerido (organización de la sesión; modo vendedor no lo ve, como el resto de `/orders`)
+- **Body / Params**: `id` del pedido y `documentId` del comprobante.
+- **Respuesta esperada**:
+  - `GET /orders`: cada pedido suma `documents: { id, kind: "FACTURA"|"NOTA_CREDITO"|"NOTA_DEBITO"|"REMITO", number, date (AAAA-MM-DD), total, currency, cae, generated }[]`, solo los que NODO guardó con PDF (hoy se guardan para la organización habilitada en la API de pedidos).
+  - `GET /orders/:id/documents/:documentId`: el PDF (`inline`). 404 si no es de la organización.
+- **Estado**: IMPLEMENTADO
+- **Notas**: `generated: true` = PDF armado por NODO con los datos oficiales (New Bytes).

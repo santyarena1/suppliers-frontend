@@ -16,6 +16,7 @@ import { formatUSD } from "@/lib/format";
 import { usePurchasePolicy } from "@/lib/purchase";
 import StorefrontPurchaseStatus from "@/components/storefront/StorefrontPurchaseStatus";
 import OrderTimeline, { STAGE_LABEL, currentStage } from "@/components/orders/OrderTimeline";
+import OrderDocuments from "@/components/orders/OrderDocuments";
 import { ORDER_TRACKING_EVENT } from "@/components/orders/OrderTrackingWatcher";
 import {
   applySchemeToLine,
@@ -738,6 +739,8 @@ function OrderCard({
         {creado && !offline && !order.storefrontStatus && !esperando && !rechazado && (
           <OrderTimeline tracking={order.tracking} providerName={order.providerName} />
         )}
+
+        {!editing && <OrderDocuments orderId={order.id} documents={order.documents ?? []} />}
 
         {order.storefrontStatus && !esperando && !rechazado && (
           <StorefrontPurchaseStatus order={order} onUpdated={onUpdated} onAviso={onAviso} />

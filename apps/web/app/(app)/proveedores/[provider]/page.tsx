@@ -422,13 +422,21 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 <p className="flex flex-wrap items-center gap-2 text-xs text-surface-400">
                   {(() => {
                     const health = (status as { health?: SyncHealth | null } | null)?.health;
+                    // «Al día» solo si de verdad lo está: con la última prueba fallida o precios viejos, se dice.
+                    const old = !status?.lastSyncedAt || Date.now() - new Date(status.lastSyncedAt).getTime() > 2 * 86_400_000;
                     const pill = listPriced
                       ? ["Por lista", "bg-sky-500/15 text-sky-300"]
-                      : health?.paused
-                        ? ["Pausado", "bg-amber-500/15 text-amber-300"]
-                        : status && !status.hasCredentials && !status.publicCatalog
-                          ? ["Falta la cuenta", "bg-red-500/15 text-red-300"]
-                          : ["Al día", "bg-emerald-500/15 text-emerald-300"];
+                      : !status
+                        ? ["…", "bg-surface-800 text-surface-400"]
+                        : health?.paused
+                          ? ["Pausado", "bg-amber-500/15 text-amber-300"]
+                          : !status.hasCredentials && !status.publicCatalog
+                            ? ["Falta la cuenta", "bg-red-500/15 text-red-300"]
+                            : health?.failing
+                              ? ["Con error", "bg-red-500/15 text-red-300"]
+                              : old || health?.stalePrices
+                                ? ["Desactualizado", "bg-amber-500/15 text-amber-300"]
+                                : ["Al día", "bg-emerald-500/15 text-emerald-300"];
                     return <span className={`rounded-full px-2 py-0.5 font-semibold ${pill[1]}`}>{pill[0]}</span>;
                   })()}
                   <span className="hidden sm:inline">

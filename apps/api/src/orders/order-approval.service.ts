@@ -143,7 +143,41 @@ export class OrderApprovalService {
     const visible = showDemo
       ? rows
       : rows.filter((row) => !isDemoDistributorKey(row.provider) && !isDemoOrderNote(row.notes));
-    return visible.map((row) => this.serialize(row));
+    const docs = await this.documentsOf(tenant.tenantId, visible.map((r) => r.id));
+    return visible.map((row) => this.serialize(row, docs.get(row.id) ?? []));
+  }
+
+  /** Facturas, notas y remitos que NODO guardó del portal, por pedido (solo los que tienen PDF). */
+  private async documentsOf(tenantId: string, orderIds: string[]): Promise<Map<string, OrderDocumentSummary[]>> {
+    const out = new Map<string, OrderDocumentSummary[]>();
+    if (orderIds.length === 0) return out;
+    const rows = await this.prisma.providerOrderDocument.findMany({
+      where: { tenantId, orderId: { in: orderIds }, assetId: { not: null } },
+      select: {
+        id: true, orderId: true, kind: true, portalNumber: true, tipo: true, puntoVenta: true, numero: true,
+        fechaEmision: true, importeTotal: true, moneda: true, cae: true, generated: true,
+      },
+      orderBy: [{ fechaEmision: "asc" }, { createdAt: "asc" }],
+    });
+    for (const d of rows) {
+      if (!d.orderId) continue;
+      const fiscal = d.puntoVenta != null && d.numero != null
+        ? `${d.tipo ? `${d.tipo} ` : ""}${String(d.puntoVenta).padStart(5, "0")}-${String(d.numero).padStart(8, "0")}`
+        : null;
+      const list = out.get(d.orderId) ?? [];
+      list.push({
+        id: d.id,
+        kind: d.kind,
+        number: fiscal ?? d.portalNumber ?? null,
+        date: d.fechaEmision ?? null,
+        total: d.importeTotal == null ? null : Number(d.importeTotal),
+        currency: d.moneda ?? null,
+        cae: d.cae ?? null,
+        generated: d.generated,
+      });
+      out.set(d.orderId, list);
+    }
+    return out;
   }
 
   async getOwn(tenant: TenantContext, id: string) {
@@ -197,7 +231,8 @@ export class OrderApprovalService {
     row: ProviderOrder & {
       createdBy?: { id: string; username: string } | null;
       approvedBy?: { id: string; username: string } | null;
-    }
+    },
+    documents: OrderDocumentSummary[] = []
   ) {
     return {
       id: row.id,
@@ -239,6 +274,21 @@ export class OrderApprovalService {
       approvedBy: row.approvedBy?.username ?? null,
       approvalDecidedAt: row.approvalDecidedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
+      documents,
     };
   }
+}
+
+/** Comprobante del portal guardado por NODO (el PDF se pide a /orders/:id/documents/:documentId). */
+export interface OrderDocumentSummary {
+  id: string;
+  /** FACTURA | NOTA_CREDITO | NOTA_DEBITO | REMITO */
+  kind: string;
+  number: string | null;
+  date: string | null;
+  total: number | null;
+  currency: string | null;
+  cae: string | null;
+  /** New Bytes: PDF armado por NODO con los datos oficiales. */
+  generated: boolean;
 }

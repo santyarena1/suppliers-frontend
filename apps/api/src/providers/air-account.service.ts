@@ -6,7 +6,8 @@ import {
   AIR_DEBEHABER_URL,
   AirPortalClient,
 } from "./air-portal-client";
-import { parseHtmlTables, pickBalance, tableRowsDetailed, type HtmlLink } from "./html-table";
+import { parseHtmlTables, pickBalance, stripTags, tableRowsDetailed, type HtmlLink } from "./html-table";
+import { Logger } from "@nestjs/common";
 import { mapProviderDraft } from "./provider-draft";
 import { documentFile } from "./document-file";
 import { assertHttpsHost } from "./safe-url";
@@ -27,16 +28,46 @@ function flattenTables(html: string): AirAccountRow[] {
 }
 
 const AIR_HOSTS = ["www.air-intra.com", "air-intra.com"];
+export const AIR_PDF_URL = "https://www.air-intra.com/2025/pdf/index.php";
+
+/**
+ * Facturas del listado «FV» de Air (el mismo que usa NODO para guardar las
+ * facturas): cada una con su PDF. La tabla vieja de comprobantes no trae links.
+ */
+export function airInvoiceRows(html: string): AirAccountRow[] {
+  const rows: AirAccountRow[] = [];
+  const seen = new Set<string>();
+  for (const m of html.matchAll(/nrocompro="([^"]+)"/gi)) {
+    const code = m[1];
+    if (!/^[\w-]{6,40}$/.test(code) || !/FV/i.test(code) || seen.has(code)) continue;
+    seen.add(code);
+    const near = stripTags(html.slice(Math.max(0, (m.index ?? 0) - 400), (m.index ?? 0) + 600));
+    const date = /\b(\d{1,2}\/\d{1,2}\/\d{4})\b/.exec(near)?.[1] ?? /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(near)?.slice(1).reverse().join("/") ?? "";
+    rows.push({
+      Fecha: date,
+      Comprobante: code,
+      _links: [{ href: `${AIR_PDF_URL}?q=${encodeURIComponent(code)}`, label: "PDF" }],
+    });
+  }
+  return rows;
+}
 
 @Injectable()
 export class AirAccountService {
+  private readonly log = new Logger(AirAccountService.name);
   constructor(private readonly prisma: PrismaService) {}
 
   async getAccount(tenantId: string, credentials: Record<string, string>) {
     const api = await AirPortalClient.login(credentials);
-    const [debehaber, comprobantes, pendientes, drafts] = await Promise.all([
+    const to = new Date();
+    const from = new Date(to.getTime() - 365 * 86_400_000);
+    const [debehaber, comprobantes, facturas, pendientes, drafts] = await Promise.all([
       this.fetchSection(api, "Debe/Haber", AIR_DEBEHABER_URL),
       this.fetchSection(api, "Comprobantes", `${AIR_COMPROBANTES_URL}?t=250213`),
+      api
+        .getText(`${AIR_COMPROBANTES_URL}?q=FV&qd=${from.toISOString().slice(0, 10)}&qh=${to.toISOString().slice(0, 10)}`)
+        .then(airInvoiceRows)
+        .catch(() => [] as AirAccountRow[]),
       this.fetchSection(api, "Pendientes", `${AIR_CPT_PENDIENTES_URL}?t=250213`),
       this.prisma.providerOrder.findMany({
         where: { tenantId, provider: "AIR" },
@@ -45,10 +76,17 @@ export class AirAccountService {
       }),
     ]);
 
+    const balance = pickBalance(debehaber.html) ?? pickBalance(comprobantes.html);
+    // Solo la forma de lo leído (sin importes): para ver en los logs si el portal cambió.
+    this.log.log(
+      `Cuenta Air: debe/haber ${debehaber.rows.length} filas [${Object.keys(debehaber.rows[0] ?? {}).filter((k) => k !== "_links").join("|")}], ` +
+        `comprobantes ${comprobantes.rows.length}, facturas FV ${facturas.length}, pendientes ${pendientes.rows.length}, saldo ${balance == null ? "no encontrado" : "leído"}`
+    );
     return {
-      balance: pickBalance(debehaber.html) ?? pickBalance(comprobantes.html),
+      balance,
       movements: debehaber.rows,
-      invoices: comprobantes.rows,
+      // Las facturas FV traen su PDF; si el listado no respondió, queda la tabla de siempre.
+      invoices: facturas.length > 0 ? facturas : comprobantes.rows,
       pending: pendientes.rows,
       drafts: drafts.map(mapProviderDraft),
       // Antes, cualquier fallo del portal se convertía en "" y la pantalla decía

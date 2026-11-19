@@ -5,6 +5,26 @@ import Link from "next/link";
 import { ordersApi, providersApi, type CatalogSyncRun, type Provider, type ProviderConfig, type ProviderStatus, type TenantOrder } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
 import { sumOrderLines } from "@/lib/order-lines";
+import { STAGE_LABEL, currentStage } from "@/components/orders/OrderTimeline";
+
+const STAGE_TONE: Record<string, string> = {
+  SENT: "bg-surface-800 text-surface-300",
+  CONFIRMED: "bg-sky-500/15 text-sky-300",
+  INVOICED: "bg-violet-500/15 text-violet-300",
+  SHIPPED: "bg-amber-500/15 text-amber-300",
+  DELIVERED: "bg-emerald-500/15 text-emerald-300",
+  CANCELLED: "bg-red-500/15 text-red-300",
+};
+
+/** Estado corto del pedido para el resumen: lo que pasó en el portal, o por qué no salió. */
+function orderState(o: TenantOrder): { label: string; tone: string } | null {
+  if (o.approvalStatus === "PENDING_APPROVAL") return { label: "Espera aprobación", tone: "bg-amber-500/15 text-amber-300" };
+  if (o.approvalStatus === "REJECTED") return { label: "Rechazado", tone: "bg-red-500/15 text-red-300" };
+  if (o.channel === "OFFLINE") return { label: "Offline", tone: "bg-surface-800 text-surface-300" };
+  if (!o.tracking?.supported) return null;
+  const stage = currentStage(o.tracking);
+  return { label: STAGE_LABEL[stage], tone: STAGE_TONE[stage] ?? STAGE_TONE.SENT };
+}
 
 const card = "rounded-xl border border-surface-800 bg-surface-900";
 const head = "flex items-center justify-between gap-2 border-b border-surface-800 px-4 py-3";
@@ -77,11 +97,23 @@ export default function ProviderSummaryTab({
             <ul className="m-0 list-none p-0">
               {orders.slice(0, 5).map((o) => {
                 const t = sumOrderLines(o.items);
+                const state = orderState(o);
+                const invoices = (o.documents ?? []).filter((d) => d.kind === "FACTURA").length;
                 return (
                   <li key={o.id} className="flex items-center justify-between gap-3 border-b border-surface-800/70 px-4 py-2.5 text-sm last:border-0">
                     <span className="min-w-0">
                       <span className="block text-white">{new Date(o.createdAt).toLocaleDateString("es-AR")} {o.orderNumber || o.webOrderNumber ? <span className="font-mono text-xs text-surface-400">#{o.orderNumber || o.webOrderNumber}</span> : null}</span>
                       <span className="block truncate text-xs text-surface-500">{o.items.length} producto{o.items.length === 1 ? "" : "s"}{o.deliveryLabel ? ` · ${o.deliveryLabel}` : ""}</span>
+                      {(state || invoices > 0) && (
+                        <span className="mt-1 flex flex-wrap gap-1.5">
+                          {state && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${state.tone}`}>{state.label}</span>}
+                          {invoices > 0 && (
+                            <Link href={`/pedidos#pedido-${o.id}`} className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300 hover:text-white">
+                              {invoices === 1 ? "Factura con PDF" : `${invoices} facturas con PDF`}
+                            </Link>
+                          )}
+                        </span>
+                      )}
                     </span>
                     <span className="whitespace-nowrap font-mono tabular-nums text-white">{t.final > 0 ? formatUSD(t.final) : "—"}</span>
                   </li>

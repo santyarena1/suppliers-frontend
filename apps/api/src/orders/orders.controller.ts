@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, StreamableFile, UseGuards } from "@nestjs/common";
+import { safeFilename } from "../providers/safe-url";
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -128,6 +129,13 @@ export class OrdersController {
   }
 
   /** Precio de hoy del proveedor para un pedido retenido, antes de aprobarlo. */
+  /** PDF de una factura o un remito que NODO guardó del portal del distribuidor. */
+  @Get(":id/documents/:documentId")
+  async document(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Param("documentId") documentId: string) {
+    const file = await this.orders.document(tenant, id, documentId);
+    return new StreamableFile(file.data, { type: file.mimeType, disposition: `inline; filename="${safeFilename(file.filename)}"` });
+  }
+
   @Post(":id/approval-quote")
   approvalQuote(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
     return this.orders.approvalQuote(tenant, id);

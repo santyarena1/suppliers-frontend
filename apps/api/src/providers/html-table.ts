@@ -163,11 +163,46 @@ export function parseSelectOptions(html: string, selectId: string): { value: str
   return options;
 }
 
-export function pickBalance(html: string): number | null {
-  const m = html.match(/saldo[^0-9-]{0,40}(-?[\d.]+,[\d]+|-?[\d]+(?:[.,]\d+)?)/i)
-    ?? html.match(/(-?[\d.]+,[\d]+|-?[\d]+(?:[.,]\d+)?)[^0-9]{0,20}saldo/i);
-  if (!m) return null;
-  const raw = m[1].includes(",") ? m[1].replace(/\./g, "").replace(",", ".") : m[1];
-  const n = Number(raw);
+/**
+ * Importe escrito como sea: «1.234,50» (AR) o «1,234.50» (US, el de Air).
+ * Con los dos separadores, el último es el decimal; con uno solo, tres cifras
+ * detrás son miles y una o dos son decimales.
+ */
+export function parseLooseAmount(raw: string): number | null {
+  const s = raw.replace(/[\s$]/g, "");
+  if (!/^-?[\d.,]*\d$/.test(s)) return null;
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  let norm: string;
+  if (lastDot >= 0 && lastComma >= 0) {
+    norm = lastComma > lastDot ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  } else {
+    const sep = lastComma >= 0 ? "," : lastDot >= 0 ? "." : null;
+    if (!sep) norm = s;
+    else {
+      const parts = s.split(sep);
+      const thousands = parts.length > 2 || parts[parts.length - 1].length === 3;
+      norm = thousands ? parts.join("") : parts.join(".");
+    }
+  }
+  const n = Number(norm);
   return Number.isFinite(n) ? n : null;
+}
+
+const AMOUNT = String.raw`-?\$?\s?\d[\d.,]*\d|-?\$?\s?\d`;
+
+/**
+ * Saldo de cuenta de una página del portal. Se busca en el texto (no en el
+ * HTML: los atributos tienen números) y nunca toma una fecha por importe.
+ */
+export function pickBalance(html: string): number | null {
+  const text = stripTags(html);
+  const after = new RegExp(`saldo[^0-9-]{0,40}?(${AMOUNT})(?![\\d/])`, "gi");
+  for (const m of text.matchAll(after)) {
+    const n = parseLooseAmount(m[1]);
+    if (n != null) return n;
+  }
+  const before = new RegExp(`(?<![\\d/])(${AMOUNT})[^0-9]{0,20}saldo`, "i");
+  const m = text.match(before);
+  return m ? parseLooseAmount(m[1]) : null;
 }

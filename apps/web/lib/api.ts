@@ -187,6 +187,35 @@ export async function downloadAuthedFile(pathWithQuery: string, filename: string
   URL.revokeObjectURL(url);
 }
 
+/** Abre un PDF protegido en otra pestaña (la pestaña se abre antes para que el navegador no la bloquee). */
+export async function openAuthedFile(path: string) {
+  const tab = typeof window !== "undefined" ? window.open("", "_blank") : null;
+  try {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const res = await fetch(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const ct = res.headers.get("content-type") || "";
+    if (!res.ok || ct.includes("application/json")) {
+      let message = `No se pudo abrir (${res.status})`;
+      try {
+        const body = (await res.json()) as { message?: string };
+        if (body.message) message = body.message;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message);
+    }
+    const url = URL.createObjectURL(await res.blob());
+    if (tab) tab.location.href = url;
+    else window.location.href = url;
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
+}
+
 export async function uploadAuthedFile(path: string, file: File, extra?: Record<string, string>) {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const form = new FormData();
@@ -1175,6 +1204,20 @@ export interface TenantOrder {
   storefrontRespondedAt?: string | null;
   /** Seguimiento en el portal del distribuidor (NODO lo mira cada 15 min). */
   tracking?: OrderTracking;
+  /** Facturas, notas y remitos que NODO guardó del portal (con PDF). */
+  documents?: OrderDocument[];
+}
+
+export interface OrderDocument {
+  id: string;
+  kind: "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "REMITO" | string;
+  number: string | null;
+  /** AAAA-MM-DD */
+  date: string | null;
+  total: number | null;
+  currency: string | null;
+  cae: string | null;
+  generated: boolean;
 }
 
 /** Etapas del seguimiento: Enviado → Confirmado → Facturado → Despachado → Entregado (o Anulado). */

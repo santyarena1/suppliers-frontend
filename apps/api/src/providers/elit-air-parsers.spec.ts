@@ -1,6 +1,6 @@
 import { elitLoginBody, mapElitCartDetails } from "./elit-web-client";
 import { applyCatalogVatPercents, parseElitCtaRsc, parseElitPaymentOptions, parseElitPaymentsPayload, parseElitPedidosRsc } from "./elit-rsc.parser";
-import { parseHtmlTables, parseFileUploadForms, parseSelectOptions, pickBalance } from "./html-table";
+import { parseHtmlTables, parseFileUploadForms, parseSelectOptions, pickBalance, parseLooseAmount } from "./html-table";
 
 describe("elitLoginBody", () => {
   it("nro de cliente numérico manda agent 0", () => {
@@ -350,6 +350,16 @@ describe("html-table", () => {
     expect(tables[0].rows[0]).toEqual(["01/01/2026", "12,50"]);
     expect(parseSelectOptions(html, "vendedor").map((o) => o.value)).toEqual(["", "01"]);
     expect(pickBalance(html)).toBe(1234.5);
+  });
+
+  it("saldo de Air: formato US, sin tomar fechas ni atributos", () => {
+    expect(pickBalance(`<td width="100">Saldo</td><td>$ 311,471.04</td>`)).toBe(311471.04);
+    expect(pickBalance(`<b>Saldo:</b> -1,250.00`)).toBe(-1250);
+    // La columna «Saldo» de una tabla seguida de la fecha de la primera fila: no es un importe.
+    expect(pickBalance(`<tr><th>Saldo</th></tr><tr><td>01/09/2026</td><td>5</td></tr>`)).toBeNull();
+    expect(parseLooseAmount("1.234,50")).toBe(1234.5);
+    expect(parseLooseAmount("1,234")).toBe(1234);
+    expect(parseLooseAmount("12,5")).toBe(12.5);
   });
 
   it("conserva hrefs de PDF en las celdas", () => {

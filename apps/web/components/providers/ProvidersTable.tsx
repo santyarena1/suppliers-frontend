@@ -60,6 +60,10 @@ export function providerRowState(p: VisibleProvider, s: ProviderStatus | undefin
   if (s?.lastSyncedAt && Date.now() - new Date(s.lastSyncedAt).getTime() > STALE_MS) {
     return { state: "stale", reason: health?.failureReason ? `Última prueba: ${health.failureReason}` : "Hace más de dos días que no se actualiza" };
   }
+  // Una falla suelta se reintenta sola; dos seguidas ya se avisan aunque los precios todavía sean recientes.
+  if (health?.failing && health.consecutiveFailures >= 2) {
+    return { state: "stale", reason: health.failureReason ? `Las últimas actualizaciones fallaron: ${health.failureReason}` : "Las últimas actualizaciones fallaron" };
+  }
   return { state: "ok", reason: "" };
 }
 

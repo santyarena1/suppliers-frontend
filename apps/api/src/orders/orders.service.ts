@@ -74,6 +74,22 @@ export class OrdersService {
     return this.approval.list(tenant);
   }
 
+  /** PDF de un comprobante guardado; siempre del comercio de la sesión. */
+  async document(tenant: TenantContext, orderId: string, documentId: string) {
+    const doc = await this.prisma.providerOrderDocument.findFirst({
+      where: { id: documentId, orderId, tenantId: tenant.tenantId },
+      select: { assetId: true },
+    });
+    const asset = doc?.assetId
+      ? await this.prisma.storedAsset.findFirst({
+          where: { id: doc.assetId, ownerTenantId: tenant.tenantId },
+          select: { mimeType: true, filename: true, data: true },
+        })
+      : null;
+    if (!asset) throw new NotFoundException("No encontramos ese comprobante");
+    return { mimeType: asset.mimeType, filename: asset.filename, data: Buffer.from(asset.data) };
+  }
+
   pending(tenant: TenantContext) {
     return this.approval.list(tenant, { pendientes: true });
   }

@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.0",
+    date: "2026-11-19",
+    title: "Proveedores más claros: estado real y pedidos con su etapa",
+    changes: [
+      { kind: "improved", text: "La ficha de cada distribuidor ya no dice «Al día» si la última actualización falló o los precios tienen más de dos días: muestra «Con error» o «Desactualizado»." },
+      { kind: "improved", text: "En Proveedores, un distribuidor cuyas dos últimas actualizaciones fallaron aparece en «Necesita atención» con el motivo." },
+      { kind: "new", text: "El resumen de cada distribuidor muestra en qué etapa está cada pedido: confirmado, facturado, despachado o entregado." },
+      { kind: "fixed", text: "Air: el saldo de la cuenta corriente se lee bien (Air escribe los importes con coma de miles) y la pestaña Facturas trae cada factura con su PDF." },
+    ],
+  },
+  {
     version: "2.28.2",
     date: "2026-11-16",
     title: "IVA correcto en la API de catálogo",
