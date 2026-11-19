@@ -259,9 +259,13 @@ export default function InvidAccountPanel() {
             <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-sky-400" />
               <div>
-                <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
-                <p className={`text-xl font-bold tabular-nums ${balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-                  {balance.toLocaleString("es-AR", { style: "currency", currency: "ARS" })}
+                {/* Invid (verificado en el portal 19/11): las facturas suman y los cobros restan,
+                    así que saldo positivo = lo que se le debe y negativo = a favor. En pesos. */}
+                <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">
+                  {balance > 0.005 ? "Le debés a Invid" : balance < -0.005 ? "Saldo a favor" : "Saldo"}
+                </span>
+                <p className={`text-xl font-bold tabular-nums ${balance > 0.005 ? "text-amber-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                  {Math.abs(balance).toLocaleString("es-AR", { style: "currency", currency: "ARS" })}
                 </p>
               </div>
             </div>

@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.4",
+    date: "2026-11-19",
+    title: "Invid: el saldo dice si es deuda o a favor",
+    changes: [
+      { kind: "fixed", text: "Invid: el saldo de la cuenta corriente ya no aparece en rojo cuando es a tu favor. Ahora dice «Le debés a Invid» o «Saldo a favor», igual que en el portal." },
+    ],
+  },
+  {
     version: "2.29.3",
     date: "2026-11-19",
     title: "Cuentas de los distribuidores más prolijas",
