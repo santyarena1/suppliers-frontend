@@ -6,4 +6,5 @@ it("forma de una página de Air sin tablas, sin importes", () => {
   expect(s).toContain("$.post");
   expect(s).toContain("nrocompro");
   expect(s).not.toContain("311");
+  expect(s).toContain("999,999.99");
 });

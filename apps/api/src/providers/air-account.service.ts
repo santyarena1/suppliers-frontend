@@ -43,7 +43,14 @@ export function airPageShape(html: string): string {
   const ids = uniq([...html.matchAll(/\bid=["']([^"']+)["']/gi)].map((m) => m[1]));
   const tags = uniq([...html.matchAll(/<([a-z][a-z0-9]*)\b/gi)].map((m) => m[1].toLowerCase()));
   const mask = (s: string) => s.replace(/\d{3,}/g, "#");
-  return mask(JSON.stringify({ urls, calls, forms, inputs, attrs, ids, tags }));
+  // Segunda vuelta: clases de los bloques, opciones de los filtros y el texto con
+  // cada dígito tapado por 9 (se ve el formato de fechas e importes, no los valores).
+  const classes = uniq([...html.matchAll(/\bclass=["']([^"']+)["']/gi)].flatMap((m) => m[1].split(/\s+/)).filter(Boolean)).slice(0, 40);
+  const options = uniq([...html.matchAll(/<option\b[^>]*value=["']([^"']*)["'][^>]*>([\s\S]*?)<\/option>/gi)].map((m) => `${m[1]}=${stripTags(m[2])}`));
+  const body = html.replace(/<script\b[\s\S]*?<\/script>/gi, " ").replace(/<style\b[\s\S]*?<\/style>/gi, " ");
+  const text = stripTags(body).replace(/\d/g, "9").slice(0, 1500);
+  const blocks = uniq([...body.matchAll(/<(div|span|label|section)\b[^>]*class=["']([^"']+)["'][^>]*>([^<]{1,60})</gi)].map((m) => `${m[1]}.${m[2]}:${m[3].trim().replace(/\d/g, "9")}`)).slice(0, 25);
+  return mask(JSON.stringify({ urls, calls, forms, inputs, attrs, ids, tags, classes, options })) + ` · bloques ${JSON.stringify(blocks)} · texto «${text}»`;
 }
 
 export const AIR_PDF_URL ="https://www.air-intra.com/2025/pdf/index.php";
