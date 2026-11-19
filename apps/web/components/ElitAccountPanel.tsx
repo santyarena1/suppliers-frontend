@@ -50,12 +50,13 @@ type Detail =
   | { kind: "draft"; row: NodoProviderDraft }
   | { kind: "payment"; row: ElitPayment };
 
-type SectionId = "cta" | "payments" | "nodo" | "orders";
+type SectionId = "cta" | "invoices" | "payments" | "nodo" | "orders";
 
 type CachedPayload = { account: ElitAccount; drafts: NodoProviderDraft[] };
 
 const SECTIONS = [
   { id: "cta", label: "Cuenta corriente" },
+  { id: "invoices", label: "Facturas" },
   { id: "payments", label: "Informes de pago" },
   { id: "nodo", label: "Desde NODO" },
   { id: "orders", label: "Notas de venta" },
@@ -123,6 +124,8 @@ export default function ElitAccountPanel() {
   const rowsForSection =
     section === "cta"
       ? (account ? account.movements ?? [] : null)
+      : section === "invoices"
+        ? (account ? (account.movements ?? []).filter(isElitInvoiceMovement) : null)
       : section === "payments"
         ? (account ? account.payments ?? [] : null)
         : section === "nodo"
@@ -130,7 +133,7 @@ export default function ElitAccountPanel() {
           : rowsByOrigin(account ? account.orders ?? [] : null, origin, isNodoOrder);
 
   const getDate =
-    section === "cta"
+    section === "cta" || section === "invoices"
       ? (m: ElitMovement) => m.date
       : section === "payments"
         ? (p: ElitPayment) => p.date
@@ -187,9 +190,14 @@ export default function ElitAccountPanel() {
     const rows = paged.filtered as unknown[];
     if (!rows.length) return null;
     if (section === "cta") return null;
+    if (section === "invoices") {
+      const s = sumAccountAmounts((rows as ElitMovement[]).map((m) => (m.debit ?? 0) - (m.credit ?? 0)));
+      return s != null ? formatAccountSum(s, "ARS") : null;
+    }
     if (section === "payments") {
+      // Los informes de pago son transferencias y cheques en pesos.
       const s = sumAccountAmounts((rows as ElitPayment[]).map((p) => p.total));
-      return s != null ? formatAccountSum(s, "USD") : null;
+      return s != null ? formatAccountSum(s, "ARS") : null;
     }
     if (section === "nodo") {
       const s = sumAccountAmounts((rows as NodoProviderDraft[]).map((d) => d.total));
@@ -288,6 +296,12 @@ export default function ElitAccountPanel() {
               }
             />
           </div>
+        ) : section === "invoices" ? (
+          <MovementsTable
+            rows={paged.items as ElitMovement[]}
+            onOpen={(m) => setDetail({ kind: "movement", row: m })}
+            emptyHint="Sin facturas ni notas de crédito en este período."
+          />
         ) : section === "payments" ? (
           <ElitPaymentSection
             payments={paged.items as ElitPayment[]}
@@ -370,10 +384,10 @@ export default function ElitAccountPanel() {
           title={`Informe ${detail.row.id}`}
           lines={[
             { label: "Id", value: detail.row.id },
-            { label: "Fecha", value: detail.row.date },
-            { label: "Estado", value: detail.row.status },
-            { label: "Total", value: detail.row.total != null ? String(detail.row.total) : "" },
-            { label: "Aprobado", value: detail.row.totalApproved != null ? String(detail.row.totalApproved) : "" },
+            { label: "Fecha", value: fmtDateTime(detail.row.date) },
+            { label: "Estado", value: paymentStatusLabel(detail.row.status) },
+            { label: "Informado", value: detail.row.total != null ? fmt(detail.row.total, "ARS") : "" },
+            { label: "Acreditado", value: detail.row.totalApproved != null ? fmt(detail.row.totalApproved, "ARS") : "" },
           ]}
           onClose={() => setDetail(null)}
         />
@@ -396,6 +410,50 @@ function fmtDate(raw: string | undefined): string {
   const iso = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
   return raw;
+}
+
+/** Facturas, notas de crédito y de débito de la cuenta corriente (lo que tiene PDF fiscal). */
+function isElitInvoiceMovement(m: ElitMovement): boolean {
+  return Boolean(m.number) && /factura|cr[eé]dito|d[eé]bito/i.test(m.form ?? "") && !/saldo|recibo/i.test(m.form ?? "");
+}
+
+/** «2026-11-16T15:31:13.906Z» → «16/11/2026 12:31» (hora de Argentina). */
+function fmtDateTime(raw: string | undefined): string {
+  if (!raw) return "—";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return fmtDate(raw);
+  return d.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires" });
+}
+
+const PAYMENT_STATUS: Record<string, string> = {
+  accredited: "Acreditado",
+  partialaccreditation: "Acreditado en parte",
+  pending: "Pendiente",
+  pendingaccreditation: "Esperando acreditación",
+  inprocess: "En revisión",
+  open: "Abierto",
+  draft: "Borrador",
+  rejected: "Rechazado",
+  cancelled: "Anulado",
+  canceled: "Anulado",
+  closed: "Cerrado",
+};
+
+function paymentStatusLabel(raw: string | undefined): string {
+  if (!raw) return "—";
+  const key = raw.replace(/[\s_-]/g, "").toLowerCase();
+  if (PAYMENT_STATUS[key]) return PAYMENT_STATUS[key];
+  // Desconocido: «someStatus» → «Some status».
+  const words = raw.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function paymentStatusClass(raw: string | undefined): string {
+  const key = (raw ?? "").toLowerCase();
+  if (key === "accredited") return "text-emerald-700 dark:text-emerald-400";
+  if (/partial/.test(key)) return "text-amber-700 dark:text-amber-400";
+  if (/reject|cancel/.test(key)) return "text-red-400";
+  return "text-surface-200";
 }
 
 function fmtStatus(raw: string | undefined): string {
@@ -669,7 +727,8 @@ function ElitPaymentSection({
               <th className="text-left font-semibold px-2 py-2">Id</th>
               <th className="text-left font-semibold px-2 py-2">Fecha</th>
               <th className="text-left font-semibold px-2 py-2">Estado</th>
-              <th className="text-right font-semibold px-2 py-2">Total</th>
+              <th className="text-right font-semibold px-2 py-2">Informado</th>
+              <th className="text-right font-semibold px-2 py-2">Acreditado</th>
               <th></th>
             </tr>
           </thead>
@@ -677,9 +736,12 @@ function ElitPaymentSection({
             {payments.map((p) => (
               <tr key={p.id}>
                 <td className="px-2 py-2 font-mono text-xs text-surface-400">{p.id}</td>
-                <td className="px-2 py-2 text-surface-400">{p.date || "—"}</td>
-                <td className="px-2 py-2 text-surface-200">{p.status || "—"}</td>
-                <td className="px-2 py-2 text-right tabular-nums">{p.total ?? "—"}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtDateTime(p.date)}</td>
+                <td className={`px-2 py-2 ${paymentStatusClass(p.status)}`}>{paymentStatusLabel(p.status)}</td>
+                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap">{fmt(p.total, "ARS")}</td>
+                <td className="px-2 py-2 text-right tabular-nums whitespace-nowrap text-surface-400">
+                  {p.totalApproved != null && p.totalApproved !== p.total ? fmt(p.totalApproved, "ARS") : p.totalApproved != null ? "Todo" : "—"}
+                </td>
                 <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(p)} /></td>
               </tr>
             ))}

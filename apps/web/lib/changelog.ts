@@ -32,6 +32,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       { kind: "fixed", text: "Air: la cuenta corriente vuelve a mostrar el estado de cuenta (debe, haber y saldo de cada comprobante) y los comprobantes pendientes, que el portal nuevo de Air dejó de mandar como tabla." },
       { kind: "improved", text: "Air: el saldo dice si le debés o si tenés saldo a favor." },
+      { kind: "fixed", text: "Elit, informes de pago: los importes se muestran en pesos (antes decía US$), con la fecha y la hora legibles y el estado en castellano (Acreditado, Acreditado en parte…), y cuánto se acreditó de cada uno." },
+      { kind: "new", text: "Elit: pestaña «Facturas» con las facturas y notas de crédito de la cuenta corriente, cada una con su PDF." },
     ],
   },
   {
