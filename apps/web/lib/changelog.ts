@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.2",
+    date: "2026-11-19",
+    title: "Cuenta de Air: saldo, movimientos y pendientes",
+    changes: [
+      { kind: "fixed", text: "Air: la cuenta corriente vuelve a mostrar el estado de cuenta (debe, haber y saldo de cada comprobante) y los comprobantes pendientes, que el portal nuevo de Air dejó de mandar como tabla." },
+      { kind: "improved", text: "Air: el saldo dice si le debés o si tenés saldo a favor." },
+    ],
+  },
+  {
     version: "2.29.1",
     date: "2026-11-19",
     title: "Facturas y remitos con nombre prolijo al descargar",

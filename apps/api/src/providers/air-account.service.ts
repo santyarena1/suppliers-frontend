@@ -8,6 +8,7 @@ import {
 } from "./air-portal-client";
 import { parseHtmlTables, pickBalance, stripTags, tableRowsDetailed, type HtmlLink } from "./html-table";
 import { Logger } from "@nestjs/common";
+import { airBalanceFromRows, parseAirDivRows } from "./air-div-rows";
 import { mapProviderDraft } from "./provider-draft";
 import { documentFile } from "./document-file";
 import { assertHttpsHost } from "./safe-url";
@@ -86,13 +87,14 @@ export class AirAccountService {
     const api = await AirPortalClient.login(credentials);
     const to = new Date();
     const from = new Date(to.getTime() - 365 * 86_400_000);
-    const [debehaber, comprobantes, facturas, pendientes, drafts] = await Promise.all([
+    // «Comprobantes» es una pantalla con filtro que pide los datos aparte: las
+    // facturas salen directo del listado FV (con su PDF).
+    const [debehaber, facturas, pendientes, drafts] = await Promise.all([
       this.fetchSection(api, "Debe/Haber", AIR_DEBEHABER_URL),
-      this.fetchSection(api, "Comprobantes", `${AIR_COMPROBANTES_URL}?t=250213`),
       api
         .getText(`${AIR_COMPROBANTES_URL}?q=FV&qd=${from.toISOString().slice(0, 10)}&qh=${to.toISOString().slice(0, 10)}`)
-        .then(airInvoiceRows)
-        .catch(() => [] as AirAccountRow[]),
+        .then((html) => ({ rows: airInvoiceRows(html), warning: undefined as string | undefined }))
+        .catch((err: unknown) => ({ rows: [] as AirAccountRow[], warning: `Facturas: el portal de Air no respondió (${(err instanceof Error ? err.message : String(err)).slice(0, 160)})` })),
       this.fetchSection(api, "Pendientes", `${AIR_CPT_PENDIENTES_URL}?t=250213`),
       this.prisma.providerOrder.findMany({
         where: { tenantId, provider: "AIR" },
@@ -101,23 +103,23 @@ export class AirAccountService {
       }),
     ]);
 
-    const balance = pickBalance(debehaber.html) ?? pickBalance(comprobantes.html);
+    const balance = airBalanceFromRows(debehaber.rows as never) ?? pickBalance(debehaber.html);
     // Solo la forma de lo leído (sin importes): para ver en los logs si el portal cambió.
     this.log.log(
       `Cuenta Air: debe/haber ${debehaber.rows.length} filas [${Object.keys(debehaber.rows[0] ?? {}).filter((k) => k !== "_links").join("|")}], ` +
-        `comprobantes ${comprobantes.rows.length}, facturas FV ${facturas.length}, pendientes ${pendientes.rows.length}, saldo ${balance == null ? "no encontrado" : "leído"}`
+        `facturas FV ${facturas.rows.length}, pendientes ${pendientes.rows.length}, saldo ${balance == null ? "no encontrado" : "leído"}`
     );
     return {
       balance,
       movements: debehaber.rows,
       // Las facturas FV traen su PDF; si el listado no respondió, queda la tabla de siempre.
-      invoices: facturas.length > 0 ? facturas : comprobantes.rows,
+      invoices: facturas.rows,
       pending: pendientes.rows,
       drafts: drafts.map(mapProviderDraft),
       // Antes, cualquier fallo del portal se convertía en "" y la pantalla decía
       // "sin movimientos": no había forma de distinguir una cuenta sin actividad
       // de un scraping roto. Ahora el motivo viaja hasta la pantalla.
-      warnings: [debehaber, comprobantes, pendientes].flatMap((s) => (s.warning ? [s.warning] : [])),
+      warnings: [debehaber, facturas, pendientes].flatMap((s) => (s.warning ? [s.warning] : [])),
       note: "Datos del portal www.air-intra.com (debe/haber y comprobantes para ver o descargar). Air no admite adjuntar pagos desde Nodo.",
     };
   }
@@ -145,6 +147,14 @@ export class AirAccountService {
     const rows = flattenTables(html);
     if (rows.length > 0) return { html, rows };
     if (tables.length === 0) {
+      // Air 2025: filas `<div class="row">` en vez de tablas.
+      const divRows = parseAirDivRows(html).map(({ _code, ...values }) => {
+        const rec: AirAccountRow = { ...values };
+        if (_code && /^FV/i.test(_code)) rec._links = [{ href: `${AIR_PDF_URL}?q=${encodeURIComponent(_code)}`, label: "PDF" }];
+        return rec;
+      });
+      if (divRows.length > 0) return { html, rows: divRows };
+      if (/class=["'][^"']*\bmain_table\b/i.test(html)) return { html, rows: [] };
       this.log.log(`Cuenta Air, forma de «${label}»: ${airPageShape(html)}`);
       return {
         html,
