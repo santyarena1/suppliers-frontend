@@ -23,6 +23,9 @@ export interface InvoiceLine {
   moneda: "ARS" | "USD" | null;
   /** Va dentro del esquema (kit). null = no se pudo saber. */
   en_esquema: boolean | null;
+  /** Del catálogo del distribuidor en NODO (se completan al armar la respuesta). */
+  part_number?: string | null;
+  ean?: string | null;
 }
 
 export interface InvoiceScheme {

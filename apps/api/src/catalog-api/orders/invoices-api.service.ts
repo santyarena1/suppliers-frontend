@@ -4,6 +4,7 @@ import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import { providerLabel } from "@nodo/shared";
 import { cronsAreGloballyEnabled } from "../../common/cron-window";
+import { withLineFacts } from "../../orders-api/invoice-line-facts";
 import { distributorCuit, invoiceFromDocument, isFiscalDocument, orderNumberLabel, type InvoicePayload, type OrderDocumentRow } from "../../orders-api/order-payload";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TgsAccessService } from "../../tgs/tgs.access";
@@ -21,8 +22,11 @@ const MAX_PAGE = 100;
 /** Un comprobante emitido hace más de esto que NODO recién encuentra (historia) no se avisa: se lee con `GET /v1/facturas`. */
 const BACKFILL_SILENT_DAYS = 7;
 const FISCAL_KINDS = ["FACTURA", "NOTA_CREDITO", "NOTA_DEBITO"];
-/** Versión del armado de la factura (2: renglones y esquema). Al subirla, el hash se recalcula sin avisar. */
-export const INVOICE_SCHEMA = 2;
+/**
+ * Versión del armado de la factura (2: renglones y esquema; 3: número de parte y EAN por renglón).
+ * Al subirla, lo que cambió sale como versión nueva (con fecha de cambio, para quien consulta) pero sin aviso.
+ */
+export const INVOICE_SCHEMA = 3;
 
 const DOC_SELECT = {
   id: true,
@@ -150,8 +154,12 @@ export class InvoicesApiService {
     const issued = d.fechaEmision ? new Date(`${d.fechaEmision}T12:00:00-03:00`) : d.createdAt;
     const old = opts.now.getTime() - issued.getTime() > BACKFILL_SILENT_DAYS * 86_400_000;
     if (state && (state.schema ?? 1) < INVOICE_SCHEMA) {
-      // El armado sumó campos: se recalcula sin avisar.
-      await this.prisma.apiInvoiceState.update({ where: { documentId: d.id }, data: { hash, schema: INVOICE_SCHEMA } });
+      // El armado sumó campos: sin aviso, pero si cambió algo es una versión nueva (así la ve quien consulta con `desde`).
+      const changed = state.hash !== hash;
+      await this.prisma.apiInvoiceState.update({
+        where: { documentId: d.id },
+        data: { hash, schema: INVOICE_SCHEMA, ...(changed ? { version: state.version + 1, changedAt: opts.now } : {}) },
+      });
       return 0;
     }
     if (state && state.hash === hash) return 0;
@@ -254,6 +262,7 @@ export class InvoicesApiService {
   // ---------- Armado ----------
 
   private async context(docs: Doc[]): Promise<Ctx> {
+    await withLineFacts(this.prisma, docs);
     const orderIds = [...new Set(docs.map((d) => d.orderId).filter((x): x is string => !!x))];
     const orders = orderIds.length ? await this.prisma.providerOrder.findMany({ where: { id: { in: orderIds } }, select: { id: true, number: true } }) : [];
     const keys = [...new Set(docs.map((d) => d.provider))];

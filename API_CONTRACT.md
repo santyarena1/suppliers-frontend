@@ -1391,3 +1391,11 @@ pedido (carrito de NODO) no sirven como costo real de un pedido en esquema.
 - **Respuesta esperada**: `{ url, dynamic, amountUsd, amountArs, rate }`. Con `MERCADOPAGO_ACCESS_TOKEN` en el servidor, `url` es un Checkout Pro armado en el momento por la cuota vigente (plan o precio pactado + módulos) en pesos al dólar oficial (dolarapi, venta), `external_reference: nodo-sub:<tenantId>`. Sin token, `dynamic: false` y el link fijo de siempre.
 - **Estado**: IMPLEMENTADO
 - **Notas**: el pago todavía se registra con «Ya pagué» o desde el admin; falta el aviso automático de Mercado Pago (webhook).
+
+### [FEATURE] Facturas: número de parte y EAN por renglón — 2026-11-19
+- **Método**: GET
+- **Ruta**: `/v1/facturas`, `/v1/facturas/:id` (y el `data.factura` de los avisos `factura.*`)
+- **Auth**: API key con `orders:read`
+- **Respuesta esperada**: cada `renglones[]` suma `part_number` y `ean` (string | null), del catálogo del distribuidor que tiene NODO (mismo proveedor + `codigo`). Sirve para reconocer el producto en el sistema del comercio aunque la factura solo traiga el código interno del distribuidor.
+- **Estado**: IMPLEMENTADO
+- **Notas**: INVOICE_SCHEMA 3. Al subir el esquema, cada factura que cambió sale con versión nueva y `actualizado` de ahora (sin aviso), así quien consulta con `desde` la vuelve a leer.

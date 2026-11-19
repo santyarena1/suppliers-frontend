@@ -49,6 +49,7 @@ function setup(initial: Doc[]) {
       }),
     },
     providerOrder: { findMany: jest.fn(async () => [{ id: "o1", number: 45 }]) },
+    providerSyncCache: { findMany: jest.fn(async () => [{ provider: "ELIT", externalId: "20665", partNumber: "GW911", ean: "6950376712345" }]) },
     tenant: { findMany: jest.fn(async () => [{ providerKey: "ELIT", name: "Elit" }]) },
     apiInvoiceState: {
       findUnique: jest.fn(async (a: { where: { documentId: string } }) => states.get(a.where.documentId) ?? null),
@@ -92,6 +93,16 @@ describe("API de facturas", () => {
       pedido: { id: "o1", numero: "NODO-45", union: "mismos productos y cantidades" },
     });
     expect(p[0].pdf_url).toMatch(/\/v1\/facturas\/nueva\/pdf$/);
+  });
+
+  it("cada renglón trae el número de parte y el EAN del catálogo del distribuidor", async () => {
+    const { service } = setup([doc("conren", { lines: [{ codigo: "20665", descripcion: "Cámara Web Redragon GW911 4K", cantidad: 1 }, { codigo: "999", descripcion: "Otro", cantidad: 1 }] })]);
+    await service.refresh("tgs", new Date("2026-11-18T10:05:00Z"));
+    const [p] = await service.payloads("tgs", [{ documentId: "conren", version: 1, changedAt: new Date("2026-11-18T10:05:00Z") }]);
+    expect(p.renglones).toEqual([
+      expect.objectContaining({ codigo: "20665", part_number: "GW911", ean: "6950376712345" }),
+      expect.objectContaining({ codigo: "999", part_number: null, ean: null }),
+    ]);
   });
 
   it("solo para la organización habilitada y con orders:read", async () => {
