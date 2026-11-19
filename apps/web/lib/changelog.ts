@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.5",
+    date: "2026-11-19",
+    title: "NODO Pro baja a USD 30 por mes",
+    changes: [
+      { kind: "improved", text: "NODO Pro pasa a costar USD 30 por mes y NODO Custom arranca desde USD 55 por mes." },
+    ],
+  },
+  {
     version: "2.29.4",
     date: "2026-11-19",
     title: "Invid: el saldo dice si es deuda o a favor",

@@ -48,7 +48,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     plan: "PRO",
     label: "NODO Pro",
     shortLabel: "Pro",
-    monthlyPrice: 38,
+    monthlyPrice: 30,
     currency: "USD",
     setupFee: null,
     tagline: "Gestioná tus compras y proveedores directamente desde NODO.",
@@ -57,7 +57,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     plan: "CUSTOM",
     label: "NODO Custom",
     shortLabel: "Custom",
-    monthlyPrice: 80,
+    monthlyPrice: 55,
     currency: "USD",
     setupFee: null,
     priceFrom: true,
@@ -72,7 +72,7 @@ export function planLabelOf(plan: string | null | undefined): string | null {
   return plan === "BASE" ? "NODO Base" : plan;
 }
 
-/** Precio de lista para mostrar: "USD 38" o "desde USD 80". */
+/** Precio de lista para mostrar: "USD 30" o "desde USD 55". */
 export function planPriceLabel(plan: TenantPlan): string {
   const def = PLAN_CATALOG[plan];
   return `${def.priceFrom ? "desde " : ""}${formatUsd(def.monthlyPrice)}`;

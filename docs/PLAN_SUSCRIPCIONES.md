@@ -8,8 +8,8 @@ Documento vivo. El plan es de la **organización** (`Tenant`), nunca de la perso
 | Plan | Precio | Para qué |
 |---|---|---|
 | NODO Base (`BASE`) | USD 35 / mes | Centralizar y preparar compras |
-| NODO Pro (`PRO`) | USD 45 / mes | Operar compras y proveedores desde NODO |
-| NODO Custom (`CUSTOM`) | USD 100 / mes + USD 300 de puesta en marcha (pago único) | NODO adaptado a la empresa |
+| NODO Pro (`PRO`) | USD 30 / mes (desde 19/11/2026; antes 38) | Operar compras y proveedores desde NODO |
+| NODO Custom (`CUSTOM`) | desde USD 55 / mes (desde 19/11/2026; antes 80) | NODO adaptado a la empresa |
 
 Catálogo, capacidades y reglas: `packages/shared/src/plans.ts` (única fuente de verdad; la web
 lo espeja en `apps/web/lib/plans.ts` porque no depende del paquete compartido). Nada en el
