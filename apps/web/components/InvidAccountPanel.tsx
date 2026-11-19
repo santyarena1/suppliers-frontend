@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import {
   invidAccountApi,
@@ -228,10 +229,10 @@ export default function InvidAccountPanel() {
     }
     if (section === "nodo") {
       const s = sumAccountAmounts((rows as InvidNodoDraft[]).map((d) => d.total));
-      return s != null ? formatAccountSum(s) : null;
+      return s != null ? formatAccountSum(s, "USD") : null;
     }
     const s = sumAccountAmounts((rows as InvidOrder[]).map((o) => o.amount));
-    return s != null ? formatAccountSum(s) : null;
+    return s != null ? formatAccountSum(s, "USD") : null;
   })();
 
   const ready = rowsForSection != null;
@@ -332,12 +333,12 @@ export default function InvidAccountPanel() {
           open
           title={`${detail.row.docType} ${detail.row.docNumber}`.trim()}
           lines={[
-            { label: "Fecha", value: detail.row.date },
+            { label: "Fecha", value: fmtPortalDate(detail.row.date, { time: false }) },
             { label: "Tipo", value: detail.row.docType },
             { label: "Número", value: detail.row.docNumber },
             { label: "Interno", value: detail.row.internalNumber },
             { label: "Moneda", value: detail.row.currency },
-            { label: "Total", value: detail.row.total },
+            { label: "Total", value: fmtPortalMoney(detail.row.total, "ARS", detail.row.currency) },
           ]}
           documents={(detail.row.hrefs ?? []).map((href, i) => ({
             label: "Descargar",
@@ -483,11 +484,11 @@ function MovementsTable({
         <tbody className="divide-y divide-surface-800">
           {rows.map((m, i) => (
             <tr key={i}>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(m.date, { time: false })}</td>
               <td className="px-2 py-2 text-surface-200">{m.docType || "—"}</td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.docNumber || "—"}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">
-                {m.currency} {m.total}
+                {fmtPortalMoney(m.total, "ARS", m.currency)}
               </td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(m)} /></td>
             </tr>
@@ -543,8 +544,8 @@ function OrdersTable({
                       : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
                 }`}>{o.status || "—"}</span>
               </td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(o.date)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmtPortalMoney(o.amount, "USD")}</td>
               <td className="px-2 py-2 text-right">
                 <div className="flex items-center justify-end gap-3">
                   {o.paymentSentAt && <PaymentSentBadge sentAt={o.paymentSentAt} />}
@@ -589,18 +590,14 @@ function DraftsTable({ drafts, onOpen }: { drafts: InvidNodoDraft[]; onOpen: (d:
           {drafts.map((d) => (
             <tr key={d.id}>
               <td className="px-2 py-2">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-amber-500/10 text-amber-400"
-                    : d.status === "PENDING" ? "bg-sky-500/10 text-sky-400"
-                    : "bg-red-500/10 text-red-400"
-                }`}>
-                  {d.status === "CREATED" ? "Pendiente" : d.status === "PENDING" ? "Procesando" : d.status}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${d.status === "CREATED" ? "bg-amber-500/10 text-amber-400" : draftStatus(d.status).cls}`}>
+                  {draftStatus(d.status, "Pendiente en Invid").label}
                 </span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidWebOrderNumber ?? "—"}</td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmtDraftTotal(d.total)}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>
           ))}

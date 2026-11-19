@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import {
   airAccountApi,
@@ -78,7 +79,7 @@ function airRowsSum(rows: AirRow[]): string | null {
     return `Debe ${formatAccountSum(debe ?? 0)} · Haber ${formatAccountSum(haber ?? 0)} · Neto ${formatAccountSum(net)}`;
   }
   const s = sumAccountAmounts(rows.map((r) => airRowAmount(r)));
-  return s != null ? formatAccountSum(s) : null;
+  return s != null ? formatAccountSum(s, "ARS") : null;
 }
 
 export default function AirAccountPanel() {
@@ -151,7 +152,7 @@ export default function AirAccountPanel() {
     if (!paged.filtered.length) return null;
     if (section === "nodo") {
       const s = sumAccountAmounts((paged.filtered as NodoProviderDraft[]).map((d) => d.total));
-      return s != null ? formatAccountSum(s) : null;
+      return s != null ? formatAccountSum(s, "USD") : null;
     }
     return airRowsSum(paged.filtered as AirRow[]);
   })();
@@ -279,7 +280,7 @@ export default function AirAccountPanel() {
 function airLines(row: AirRow): AccountDetailLine[] {
   return Object.entries(row)
     .filter(([k]) => k !== "_links" && k !== "_href")
-    .map(([label, value]) => ({ label, value: value == null ? "" : String(value) }));
+    .map(([label, value]) => ({ label, value: value == null || value === "" ? "" : airCell(label, value) }));
 }
 
 function airTaxTotals(row: AirRow): AccountDetailLine[] {
@@ -296,8 +297,29 @@ function airDocs(row: AirRow): AccountDetailDoc[] {
   }));
 }
 
+/** Columnas de Air que son importes: vienen en formato US («311,471.04») y son pesos. */
+const AIR_MONEY = /debe|haber|saldo|importe|total|acumula|neto|monto/i;
+const AIR_ORDER = ["Fecha", "Comprobante", "Vence", "Vendedor", "Debe", "Haber", "Importe", "Saldo", "Acumula"];
+
+/** Todas las columnas que aparecen en alguna fila (una factura trae Debe y un recibo Haber), en orden fijo. */
+function airColumns(rows: AirRow[]): string[] {
+  const seen = new Set<string>();
+  for (const r of rows) for (const k of Object.keys(r)) if (!k.startsWith("_")) seen.add(k);
+  const known = AIR_ORDER.filter((k) => seen.has(k));
+  const rest = [...seen].filter((k) => !AIR_ORDER.includes(k));
+  return [...known, ...rest].slice(0, 8);
+}
+
+function airCell(key: string, value: unknown): string {
+  const text = airCellText(value);
+  if (text == null || text.trim() === "") return "—";
+  if (AIR_MONEY.test(key)) return fmtPortalMoney(text, "ARS");
+  if (/fecha|vence/i.test(key)) return fmtPortalDate(text, { time: false });
+  return text;
+}
+
 function HtmlRowsTable({ rows, empty, onOpen }: { rows: AirRow[]; empty: string; onOpen: (row: AirRow) => void }) {
-  const keys = rows[0] ? Object.keys(rows[0]).filter((k) => k !== "_links" && k !== "_href").slice(0, 8) : [];
+  const keys = airColumns(rows);
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -313,7 +335,7 @@ function HtmlRowsTable({ rows, empty, onOpen }: { rows: AirRow[]; empty: string;
           {rows.map((row, i) => (
             <tr key={i}>
               {keys.map((k) => (
-                <td key={k} className="px-2 py-2 text-surface-400 whitespace-nowrap">{String(row[k] ?? "—")}</td>
+                <td key={k} className={`px-2 py-2 whitespace-nowrap ${AIR_MONEY.test(k) ? "text-right tabular-nums text-surface-200" : "text-surface-400"}`}>{airCell(k, row[k])}</td>
               ))}
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(row)} /></td>
             </tr>
@@ -344,13 +366,11 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
           {drafts.map((d) => (
             <tr key={d.id}>
               <td className="px-2 py-2">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
-                }`}>{d.status === "CREATED" ? "Enviado" : d.status}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status, "Enviado").cls}`}>{draftStatus(d.status, "Enviado").label}</span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmtDraftTotal(d.total)}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>
           ))}

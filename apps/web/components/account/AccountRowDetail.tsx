@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { fmtPortalMoney } from "@/lib/accountFormat";
 import { X } from "lucide-react";
 import NodoSpinner from "@/components/NodoSpinner";
 import { CheckoutGhostButton } from "@/components/checkout/CheckoutForm";
@@ -35,7 +36,8 @@ function formatMoneyCell(value: string | number | undefined): string {
     if (!Number.isFinite(value)) return "";
     return value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-  return String(value);
+  // Ya formateado («US$ 1.234,50») o texto del portal («US$ 1234.50»): se normaliza.
+  return fmtPortalMoney(value, null);
 }
 
 export default function AccountRowDetail({
@@ -133,7 +135,7 @@ export default function AccountRowDetail({
                   </thead>
                   <tbody className="divide-y divide-surface-800">
                     {items!.map((it, i) => {
-                      const product = it.name || "Ítem";
+                      const product = it.name || (it.code ? "" : "Ítem");
                       return (
                       <tr key={i}>
                         <td className={`py-1.5 pr-2 min-w-0 ${it.indent ? "pl-3" : ""}`}>

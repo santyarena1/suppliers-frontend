@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import {
   distecnaAccountApi,
   distecnaCheckoutApi,
@@ -84,7 +85,7 @@ export default function DistecnaAccountPanel() {
   useClampPage(history.page, paged.pages, history.setPage);
 
   const amountSum = sumAccountAmounts(paged.filtered.map((d) => d.total));
-  const amountTotal = amountSum != null ? formatAccountSum(amountSum) : null;
+  const amountTotal = amountSum != null ? formatAccountSum(amountSum, "USD") : null;
 
   return (
     <>
@@ -156,13 +157,11 @@ export default function DistecnaAccountPanel() {
                 {paged.items.map((d) => (
                   <tr key={d.id}>
                     <td className="px-2 py-2">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
-                      }`}>{d.status === "CREATED" ? "Creado" : d.status}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status).cls}`}>{draftStatus(d.status, "Creado").label}</span>
                     </td>
                     <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmtDraftTotal(d.total)}</td>
                     <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setOpen(d)} /></td>
                   </tr>
                 ))}

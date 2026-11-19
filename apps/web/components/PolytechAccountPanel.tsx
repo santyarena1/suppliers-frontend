@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import {
   polytechAccountApi,
   polytechCheckoutApi,
@@ -106,8 +107,9 @@ export default function PolytechAccountPanel() {
         code: it.sku,
         name: it.description || it.sku || "Ítem",
         qty: it.quantity ?? undefined,
-        total: it.total ?? undefined,
-        iva: it.vat ?? undefined,
+        price: it.total != null && it.quantity ? formatAccountSum(Number(it.total) / Number(it.quantity), it.currency === "ARS" ? "ARS" : "USD") : undefined,
+        total: it.total != null ? formatAccountSum(Number(it.total), it.currency === "ARS" ? "ARS" : "USD") : undefined,
+        iva: it.vat != null && Number.isFinite(Number(it.vat)) ? `${Number(it.vat).toLocaleString("es-AR", { maximumFractionDigits: 1 })}%` : undefined,
       })));
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -125,7 +127,7 @@ export default function PolytechAccountPanel() {
   const amountSum = sumAccountAmounts(
     (history.section === "nodo" ? paged.filtered.map((d) => (d as NodoProviderDraft).total) : paged.filtered.map((o) => (o as PolytechHistoryOrder).total))
   );
-  const amountTotal = amountSum != null ? formatAccountSum(amountSum) : null;
+  const amountTotal = amountSum != null ? formatAccountSum(amountSum, "USD") : null;
 
   return (
     <>
@@ -143,14 +145,14 @@ export default function PolytechAccountPanel() {
             ) : (
               <ul className="text-sm text-surface-200 space-y-1">
                 {data.perceptions.map((p) => (
-                  <li key={p.id}>{p.description} · {p.percent}%</li>
+                  <li key={p.id}>{p.description} · {Number(p.percent).toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</li>
                 ))}
               </ul>
             )}
           </div>
           <div className="border border-surface-800 rounded-xl px-4 py-3">
             <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">Dólar y direcciones</p>
-            <p className="text-sm text-surface-200">{data.exchangeRate != null ? `USD ${data.exchangeRate.toLocaleString("es-AR")}` : "Sin cotización"}</p>
+            <p className="text-sm text-surface-200">{data.exchangeRate != null ? `Dólar ${formatAccountSum(data.exchangeRate, "ARS")}` : "Sin cotización"}</p>
             <p className="text-[11px] text-surface-500 mt-0.5">{data.addresses.length} direcciones · {data.couriers.length} transportes</p>
           </div>
         </div>
@@ -200,12 +202,10 @@ export default function PolytechAccountPanel() {
                 {nodoRows.items.map((d) => (
                   <tr key={d.id}>
                     <td className="px-2 py-2">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
-                      }`}>{d.status === "CREATED" ? "Creado" : d.status}</span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status).cls}`}>{draftStatus(d.status, "Creado").label}</span>
                     </td>
                     <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? "—"}</td>
-                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
+                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
                     <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total != null ? formatUSD(Number(d.total)) : "—"}</td>
                     <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setOpenDraft(d)} /></td>
                   </tr>
@@ -234,10 +234,10 @@ export default function PolytechAccountPanel() {
                     <td className="px-2 py-2 text-xs text-surface-300">{BUCKET_LABEL[o.bucket]}</td>
                     <td className="px-2 py-2 text-surface-400 font-mono text-xs">#{o.id}</td>
                     <td className="px-2 py-2 text-surface-400 whitespace-nowrap">
-                      {o.createdAt ? new Date(o.createdAt).toLocaleString("es-AR") : "—"}
+                      {fmtPortalDate(o.createdAt)}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums text-surface-200">
-                      {o.total != null ? formatUSD(o.total) : "—"}
+                      {o.total != null ? formatAccountSum(o.total, o.currency === "ARS" ? "ARS" : "USD") : "—"}
                     </td>
                     <td className="px-2 py-2 text-right"><VerMasButton onClick={() => void openPortal(o)} /></td>
                   </tr>
@@ -266,7 +266,7 @@ export default function PolytechAccountPanel() {
           title={`Pedido #${openOrder.id}`}
           lines={[
             { label: "Estado", value: BUCKET_LABEL[openOrder.bucket] },
-            { label: "Fecha", value: openOrder.createdAt ? new Date(openOrder.createdAt).toLocaleString("es-AR") : "—" },
+            { label: "Fecha", value: fmtPortalDate(openOrder.createdAt) },
           ]}
           items={detailItems ?? []}
           totals={openOrder.total != null ? [{ label: "Total", value: formatUSD(openOrder.total) }] : []}

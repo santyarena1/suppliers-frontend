@@ -1,4 +1,5 @@
 import type { AccountDetailDoc, AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { fmtPortalDate } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import {
   addIva,
@@ -157,7 +158,7 @@ export function elitSaleNoteHeaderLines(o: ElitSaleNote): AccountDetailLine[] {
   const detail = o.statusDescription?.trim() || "";
   return [
     { label: "N°", value: o.orderNumber || "" },
-    { label: "Fecha", value: o.date || "" },
+    { label: "Fecha", value: o.date ? fmtPortalDate(o.date, { time: false }) : "" },
     { label: "Estado", value: status },
     { label: "Detalle", value: detail && detail !== status ? detail : "" },
     { label: "Factura", value: hasInvoice(o) ? o.invoiceNumber.trim() : "Pendiente", tone: hasInvoice(o) ? undefined : "warn" },

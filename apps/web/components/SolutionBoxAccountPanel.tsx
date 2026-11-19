@@ -1,6 +1,7 @@
 "use client";
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -137,7 +138,7 @@ export default function SolutionBoxAccountPanel() {
           <ProfileField label="Entrega" value={account.profile.deliveryType} />
           <ProfileField
             label="Cotización"
-            value={account.profile.exchange != null ? `USD ${account.profile.exchange}` : null}
+            value={account.profile.exchange != null && Number(account.profile.exchange) > 1 ? `Dólar ${formatAccountSum(Number(account.profile.exchange), "ARS")}` : null}
           />
         </div>
       )}
@@ -195,12 +196,12 @@ export default function SolutionBoxAccountPanel() {
           open
           title={`Pedido ${detail.row.number}/${detail.row.extension}`}
           lines={[
-            { label: "Fecha", value: detail.row.date },
+            { label: "Fecha", value: fmtPortalDate(detail.row.date, { time: false }) },
             { label: "Estado", value: detail.row.status },
             { label: "Vendedor", value: detail.row.seller },
             { label: "Condición de pago", value: detail.row.paymentCondition },
             { label: "Factura", value: detail.row.invoice ?? "" },
-            { label: "Cotización", value: detail.row.exchange != null ? String(detail.row.exchange) : "" },
+            { label: "Cotización", value: detail.row.exchange != null && Number(detail.row.exchange) > 1 ? formatAccountSum(Number(detail.row.exchange), "ARS") : "" },
             { label: "Importe", value: money(detail.row.amount, detail.row.currency) },
           ]}
           items={sbOrderItems(detail.row)}
@@ -259,7 +260,7 @@ function OrdersTable({
                   {o.number}/{o.extension}
                   {isNodo(o) && <NodoOrderBadge />}
                 </td>
-                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(o.date, { time: false })}</td>
                 <td className="px-2 py-2 text-surface-300">{o.status}</td>
                 <td className="px-2 py-2 text-surface-500 font-mono text-xs">{o.invoice ?? "—"}</td>
                 <td className="px-2 py-2 text-right tabular-nums text-surface-200">{money(o.amount, o.currency)}</td>
@@ -302,12 +303,10 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
           {drafts.map((d) => (
             <tr key={d.id}>
               <td className="px-2 py-2">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : d.status === "PENDING" || d.status === "PENDING_APPROVAL" ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400"
-                }`}>{d.status === "CREATED" ? "Creado" : d.status}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status).cls}`}>{draftStatus(d.status, "Creado").label}</span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total != null ? formatAccountSum(Number(d.total), "USD") : "—"}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>

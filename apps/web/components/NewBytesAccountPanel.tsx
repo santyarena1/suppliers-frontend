@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import {
   newBytesAccountApi,
@@ -220,7 +221,7 @@ export default function NewBytesAccountPanel() {
     }
     if (section === "nodo") {
       const s = sumAccountAmounts((rows as NewBytesNodoDraft[]).map((d) => d.total));
-      return s != null ? formatAccountSum(s) : null;
+      return s != null ? formatAccountSum(s, "USD") : null;
     }
     const s = sumAccountAmounts((rows as NewBytesOrder[]).map((o) => o.amount));
     return s != null ? formatAccountSum(s, "USD") : null;
@@ -340,7 +341,7 @@ export default function NewBytesAccountPanel() {
           open
           title={`${detail.row.invoiceType ?? "Comprobante"} ${detail.row.invoiceNumber ?? ""}`.trim()}
           lines={[
-            { label: "Fecha", value: detail.row.invoiceDate || "" },
+            { label: "Fecha", value: detail.row.invoiceDate ? fmtPortalDate(detail.row.invoiceDate, { time: false }) : "" },
             { label: "Tipo", value: detail.row.invoiceType || "" },
             { label: "Número", value: detail.row.invoiceNumber || "" },
             { label: "Detalle", value: detail.row.invoiceLabel || "" },
@@ -414,7 +415,7 @@ function nbComprobanteTotals(m: NewBytesComprobante) {
 /** Importe en dólares, o un guion cuando el portal no lo manda. */
 function usd(value: number | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  return `USD ${value.toLocaleString("es-AR", { maximumFractionDigits: 2 })}`;
+  return formatAccountSum(value, "USD");
 }
 
 function MovementsTable({
@@ -442,7 +443,7 @@ function MovementsTable({
         <tbody className="divide-y divide-surface-800">
           {rows.map((m, i) => (
             <tr key={String(m.voucherId ?? i)}>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.invoiceDate || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(m.invoiceDate, { time: false })}</td>
               <td className="px-2 py-2 text-surface-200">
                 {m.invoiceType}{m.branch != null ? `-${m.branch}` : ""}
               </td>
@@ -482,17 +483,13 @@ function DraftsTable({ drafts, onOpen }: { drafts: NewBytesNodoDraft[]; onOpen: 
           {drafts.map((d) => (
             <tr key={d.id}>
               <td className="px-2 py-2">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400"
-                    : d.status === "PENDING" ? "bg-amber-500/10 text-amber-400"
-                    : "bg-red-500/10 text-red-400"
-                }`}>
-                  {d.status === "CREATED" ? "Creado" : d.status === "PENDING" ? "Procesando" : d.status}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status).cls}`}>
+                  {draftStatus(d.status, "Creado").label}
                 </span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmtDraftTotal(d.total)}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>
           ))}
@@ -582,7 +579,7 @@ function OrdersTable({
                 }`}>{o.status || "—"}</span>
                 )}
               </td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(o.date, { time: false })}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">
                 {o.totalUsd != null ? (
                   <>
@@ -592,7 +589,7 @@ function OrdersTable({
                     )}
                   </>
                 ) : (
-                  o.amount ?? "—"
+                  fmtPortalMoney(o.amount, "USD")
                 )}
               </td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(o)} /></td>

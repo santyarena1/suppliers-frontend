@@ -26,6 +26,18 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.3",
+    date: "2026-11-19",
+    title: "Cuentas de los distribuidores más prolijas",
+    changes: [
+      { kind: "fixed", text: "«Desde NODO», en todos los distribuidores: el estado de cada pedido en castellano y con su color (Enviando, Esperando firma, Falló…), el total en dólares con formato y la fecha sin segundos." },
+      { kind: "fixed", text: "Fechas en el mismo formato en todas las cuentas (16/11/2026): notas de venta de Elit, comprobantes y pedidos de New Bytes, New Tree, Solution Box, Invid y Polytech." },
+      { kind: "fixed", text: "Air: los importes del estado de cuenta y de los pendientes se muestran en pesos con formato argentino (antes «311,471.04») y aparecen siempre las columnas Debe y Haber." },
+      { kind: "fixed", text: "Invid: importes de la cuenta corriente, de los pedidos y de cada producto con formato (antes «US$ 1234.50»)." },
+      { kind: "fixed", text: "Polytech: el IVA de cada producto como «10,5%», precio unitario en el detalle y la moneda de cada pedido; la cotización se muestra como «Dólar $ 1.530,00» en Elit, Solution Box y Polytech." },
+    ],
+  },
+  {
     version: "2.29.2",
     date: "2026-11-19",
     title: "Cuenta de Air: saldo, movimientos y pendientes",

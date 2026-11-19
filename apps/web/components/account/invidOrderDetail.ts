@@ -1,4 +1,5 @@
 import type { AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { mergeSplit, taxBreakdownLines } from "@/components/account/accountTaxBreakdown";
 import type { InvidOrder } from "@/lib/api";
 import { formatAccountSum, parseAccountAmount } from "@/lib/account-history";
@@ -8,7 +9,7 @@ export function invidOrderHeaderLines(row: InvidOrder): AccountDetailLine[] {
     { label: "Orden", value: row.orderNumber },
     { label: "Pedido web", value: row.webOrderNumber },
     { label: "Estado", value: row.status },
-    { label: "Fecha", value: row.date },
+    { label: "Fecha", value: fmtPortalDate(row.date) },
     { label: "Factura", value: row.invoice },
     { label: "Entrega", value: row.delivery || "" },
     { label: "Pago", value: row.payment || "" },
@@ -20,8 +21,8 @@ export function invidOrderItems(row: InvidOrder): AccountDetailItem[] {
     code: it.code,
     name: it.name,
     qty: it.qty,
-    price: it.price,
-    total: it.total,
+    price: it.price != null && it.price !== "" ? fmtPortalMoney(it.price, "USD") : undefined,
+    total: it.total != null && it.total !== "" ? fmtPortalMoney(it.total, "USD") : undefined,
   }));
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import {
   elitAccountApi,
@@ -201,7 +202,7 @@ export default function ElitAccountPanel() {
     }
     if (section === "nodo") {
       const s = sumAccountAmounts((rows as NodoProviderDraft[]).map((d) => d.total));
-      return s != null ? formatAccountSum(s) : null;
+      return s != null ? formatAccountSum(s, "USD") : null;
     }
     const orders = rows as ElitSaleNote[];
     const byCur = new Map<string, number>();
@@ -224,7 +225,7 @@ export default function ElitAccountPanel() {
         <p className="text-xs text-surface-400 mb-3 max-w-6xl">
           {account.profile.name}
           {account.profile.id ? ` · cliente ${account.profile.id}` : ""}
-          {account.profile.exchange != null ? ` · USD ${account.profile.exchange}` : ""}
+          {account.profile.exchange != null && Number(account.profile.exchange) > 1 ? ` · Dólar ${formatAccountSum(Number(account.profile.exchange), "ARS")}` : ""}
         </p>
       )}
 
@@ -361,7 +362,7 @@ export default function ElitAccountPanel() {
             { label: "Cargado a la cuenta", value: fmt(detail.row.debit, "ARS") },
             { label: "Pagado / descontado", value: fmt(detail.row.credit, "ARS") },
             { label: "Saldo", value: fmt(detail.row.balance, "ARS") },
-            { label: "Estado", value: detail.row.status || "" },
+            { label: "Estado", value: detail.row.status && !/^[a-z]+[A-Z]?[a-zA-Z]*$/.test(detail.row.status) ? detail.row.status : paymentStatusLabel(detail.row.status) === "—" ? "" : paymentStatusLabel(detail.row.status) },
           ]}
           documents={elitMovementDocs(detail.row)}
           note={/saldo/i.test(detail.row.form) ? "El saldo no es un comprobante descargable." : undefined}
@@ -652,7 +653,7 @@ function OrdersTable({
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass(o.status)}`}>{o.status || "—"}</span>
               </td>
               <td className="px-2 py-2 text-surface-400">{o.warehouseName || "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(o.date, { time: false })}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(o.amount, o.currency)}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(o)} /></td>
             </tr>
@@ -683,13 +684,11 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
           {drafts.map((d) => (
             <tr key={d.id}>
               <td className="px-2 py-2">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
-                }`}>{d.status === "CREATED" ? "Creado" : d.status}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status, "Creado").cls}`}>{draftStatus(d.status, "Creado").label}</span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmtDraftTotal(d.total)}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>
           ))}

@@ -1,4 +1,5 @@
 import type { AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { fmtPortalDate } from "@/lib/accountFormat";
 import {
   addIva,
   emptyIvaAcc,
@@ -24,7 +25,7 @@ export function nbOrderHeaderLines(row: NewBytesOrder): AccountDetailLine[] {
     { label: "Sucursal", value: row.branch != null ? String(row.branch) : "" },
     { label: "Estado", value: row.status || nbStatusLabel(row.statusColor) },
     { label: "Detalle estado", value: row.statusDescription && row.statusDescription !== row.status ? row.statusDescription : "" },
-    { label: "Fecha", value: row.date || "" },
+    { label: "Fecha", value: row.date ? fmtPortalDate(row.date, { time: false }) : "" },
     { label: "Cliente", value: row.clientName || "" },
     { label: "Cargada por", value: row.userName || "" },
     { label: "Pago", value: row.payment || "" },
@@ -61,7 +62,7 @@ export function nbStatusLabel(color: NewBytesOrder["statusColor"]): string {
 /** Seguimiento del envío, del más reciente al más viejo. */
 export function nbTrackingLines(row: NewBytesOrder): AccountDetailLine[] {
   return [...(row.tracking ?? [])].reverse().map((step) => ({
-    label: step.date || "Sin fecha",
+    label: step.date ? fmtPortalDate(step.date) : "Sin fecha",
     value: [step.state, step.branch, step.address].filter(Boolean).join(" · "),
   }));
 }

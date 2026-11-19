@@ -1,6 +1,7 @@
 "use client";
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
+import { draftStatus, fmtDraftTotal, fmtNodoDateTime, fmtPortalDate, fmtPortalMoney } from "@/lib/accountFormat";
 import { documentFilename } from "@/lib/documentFilename";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -235,8 +236,8 @@ export default function NewTreeAccountPanel() {
           lines={[
             { label: "Tipo", value: detail.row.form },
             { label: "Número", value: detail.row.number },
-            { label: "Fecha", value: detail.row.date },
-            { label: "Vencimiento", value: detail.row.dueDate },
+            { label: "Fecha", value: fmtPortalDate(detail.row.date, { time: false }) },
+            { label: "Vencimiento", value: detail.row.dueDate ? fmtPortalDate(detail.row.dueDate, { time: false }) : "" },
             { label: "Moneda", value: detail.row.currency || "" },
             { label: "Cargado a la cuenta", value: money(detail.row.debit, detail.row.currency) },
             { label: "Pagado / descontado", value: money(detail.row.credit, detail.row.currency) },
@@ -251,7 +252,7 @@ export default function NewTreeAccountPanel() {
           open
           title={`Pedido web ${detail.row.id}`}
           lines={[
-            { label: "Fecha", value: detail.row.date },
+            { label: "Fecha", value: fmtPortalDate(detail.row.date, { time: false }) },
             { label: "Estado", value: detail.row.status },
             { label: "Origen", value: detail.row.origin },
             { label: "Monto", value: money(detail.row.amount, detail.row.currency) },
@@ -332,9 +333,9 @@ function MovementsTable({
             const href = documentHref(m);
             return (
               <tr key={`${m.voucher}-${i}`}>
-                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(m.date, { time: false })}</td>
                 <td className="px-2 py-2 text-surface-200 font-mono text-xs">{m.voucher}</td>
-                <td className="px-2 py-2 text-surface-500 whitespace-nowrap">{m.dueDate}</td>
+                <td className="px-2 py-2 text-surface-500 whitespace-nowrap">{m.dueDate ? fmtPortalDate(m.dueDate, { time: false }) : "—"}</td>
                 <td className="px-2 py-2 text-right tabular-nums text-red-300">{money(m.debit, m.currency)}</td>
                 <td className="px-2 py-2 text-right tabular-nums text-emerald-300">{money(m.credit, m.currency)}</td>
                 <td className="px-2 py-2 text-right">
@@ -390,7 +391,7 @@ function OrdersTable({
                 {o.id}
                 {isNodo(o) && <NodoOrderBadge />}
               </td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtPortalDate(o.date, { time: false })}</td>
               <td className="px-2 py-2 text-surface-300">{o.status}</td>
               <td className="px-2 py-2 text-surface-500">{o.origin}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{money(o.amount, o.currency)}</td>
@@ -425,12 +426,10 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
           {drafts.map((d) => (
             <tr key={d.id}>
               <td className="px-2 py-2">
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : d.status === "PENDING" || d.status === "PENDING_APPROVAL" ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400"
-                }`}>{d.status === "CREATED" ? "Creado" : d.status}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${draftStatus(d.status).cls}`}>{draftStatus(d.status, "Creado").label}</span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtNodoDateTime(d.createdAt)}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total != null ? formatAccountSum(Number(d.total), "USD") : "—"}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>

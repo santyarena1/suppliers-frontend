@@ -1,17 +1,19 @@
 import type { AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
 import { taxBreakdownLines, taxFromDraft } from "@/components/account/accountTaxBreakdown";
 import type { NodoProviderDraft } from "@/lib/api";
+import { draftStatus, fmtNodoDateTime } from "@/lib/accountFormat";
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 
 export function draftLines(d: NodoProviderDraft): AccountDetailLine[] {
   return [
-    { label: "Estado", value: d.status === "CREATED" ? "Creado" : d.status },
+    { label: "Estado", value: draftStatus(d.status, "Creado").label },
     { label: "Pedido", value: d.invidOrderNumber || "" },
     { label: "Pedido web", value: d.invidWebOrderNumber || "" },
     { label: "Pago", value: d.paymentLabel || "" },
     { label: "Entrega", value: d.deliveryLabel || "" },
     { label: "Notas", value: d.notes || "" },
-    { label: "Fecha", value: d.createdAt ? new Date(d.createdAt).toLocaleString("es-AR") : "" },
-    { label: "Error", value: d.errorMessage || "" },
+    { label: "Fecha", value: d.createdAt ? fmtNodoDateTime(d.createdAt) : "" },
+    { label: "Error", value: d.errorMessage ? friendlyErrorMessage(d.errorMessage) : "" },
   ];
 }
 
