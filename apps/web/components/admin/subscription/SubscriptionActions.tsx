@@ -406,10 +406,44 @@ function SetupFeeForm({ detail, tenantId, busy, run }: { detail: AdminSubscripti
         />
         Si está pendiente, bloquea las funciones Custom
       </label>
+      <SetupFeeAmount key={String(detail.setupFee.amount)} detail={detail} tenantId={tenantId} busy={busy} run={run} />
       <Hint>
-        Monto: {detail.setupFee.amount !== null ? formatUsd(detail.setupFee.amount) : "—"}
-        {detail.setupFee.paidAt ? ` · pagada el ${fmtDate(detail.setupFee.paidAt)}` : ""}. Para cobrarla, usá «Registrar pago» → Puesta en marcha.
+        {detail.setupFee.paidAt ? `Pagada el ${fmtDate(detail.setupFee.paidAt)}. ` : ""}Para cobrarla, usá «Registrar pago» → Puesta en marcha.
       </Hint>
     </>
+  );
+}
+
+/** Monto de la puesta en marcha de este comercio (USD). Vacío = sin monto. */
+function SetupFeeAmount({ detail, tenantId, busy, run }: { detail: AdminSubscriptionDetail; tenantId: string; busy: boolean; run: Run }) {
+  const [value, setValue] = useState(detail.setupFee.amount != null ? String(detail.setupFee.amount) : "");
+  const parsed = value.trim() === "" ? null : Number(value.replace(",", "."));
+  const valid = parsed === null || (Number.isFinite(parsed) && parsed >= 0);
+  const changed = parsed !== detail.setupFee.amount;
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!valid || !changed) return;
+        void run(() => adminSubscriptionsApi.setSetupFee(tenantId, { amount: parsed }), "Monto de la puesta en marcha actualizado");
+      }}
+    >
+      <label className="flex items-center gap-1.5 text-xs text-surface-300">
+        Monto USD
+        <input
+          type="text"
+          inputMode="decimal"
+          value={value}
+          disabled={busy}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="—"
+          className="w-24 rounded-lg border border-surface-700 bg-surface-900 px-2 py-1 text-sm text-white tabular-nums"
+        />
+      </label>
+      <button type="submit" disabled={busy || !valid || !changed} className={btnCls}>
+        Guardar monto
+      </button>
+    </form>
   );
 }
