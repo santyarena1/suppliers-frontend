@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { documentFilename } from "@/lib/documentFilename";
 import {
   invidAccountApi,
   invidCheckoutApi,
@@ -341,7 +342,7 @@ export default function InvidAccountPanel() {
           documents={(detail.row.hrefs ?? []).map((href, i) => ({
             label: "Descargar",
             href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
-            filename: `invid-${detail.row.docNumber || i}.pdf`,
+            filename: documentFilename("INVID", detail.row.docType, detail.row.docNumber || String(i + 1), detail.row.date),
           }))}
           note={(detail.row.hrefs ?? []).length === 0 ? "Este movimiento no trae un link de PDF en el HTML de Invid." : undefined}
           onClose={() => setDetail(null)}
@@ -428,14 +429,14 @@ function InvidOrderDetail({
         ...(row.invoiceHrefs ?? []).map((href, i) => ({
           label: "Descargar factura",
           href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
-          filename: `invid-factura-${row.orderNumber || i}.pdf`,
+          filename: documentFilename("INVID", "FACTURA", row.invoice || row.orderNumber || String(i + 1), row.date),
         })),
         ...(row.links ?? [])
           .filter((l) => !/ultima\.php/i.test(l.href))
           .map((l) => ({
             label: l.label || "Descargar",
             href: `/providers/INVID/documents?href=${encodeURIComponent(l.href)}`,
-            filename: l.label || "invid-doc",
+            filename: documentFilename("INVID", l.label, row.orderNumber, row.date),
           })),
       ]}
       extra={

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { DOCUMENT_NAME_SELECT, storedDocumentFilename } from "../../orders-api/document-filename";
 import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import { providerLabel } from "@nodo/shared";
@@ -387,14 +388,14 @@ export class OrdersApiService {
     const n = /^NODO-(\d+)$/i.exec(idOrNumber.trim())?.[1];
     const order = await this.prisma.providerOrder.findFirst({ where: n ? { tenantId, number: Number(n) } : { tenantId, id: idOrNumber }, select: { id: true } });
     if (!order) throw Errors.notFound("El pedido");
-    const doc = await this.prisma.providerOrderDocument.findFirst({ where: { id: documentId, orderId: order.id, tenantId }, select: { assetId: true } });
+    const doc = await this.prisma.providerOrderDocument.findFirst({ where: { id: documentId, orderId: order.id, tenantId }, select: { assetId: true, ...DOCUMENT_NAME_SELECT } });
     if (!doc?.assetId) throw Errors.notFound("El comprobante");
     const asset = await this.prisma.storedAsset.findFirst({
       where: { id: doc.assetId, ownerTenantId: tenantId },
       select: { mimeType: true, filename: true, data: true },
     });
     if (!asset) throw Errors.notFound("El comprobante");
-    return { mimeType: asset.mimeType, filename: asset.filename, data: Buffer.from(asset.data) };
+    return { mimeType: asset.mimeType, filename: storedDocumentFilename(doc), data: Buffer.from(asset.data) };
   }
 
   /** Eventos nuevos del comercio, para los webhooks. */

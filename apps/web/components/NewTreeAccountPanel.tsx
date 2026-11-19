@@ -1,6 +1,7 @@
 "use client";
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
+import { documentFilename } from "@/lib/documentFilename";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { XCircle } from "lucide-react";
@@ -60,7 +61,7 @@ function documentHref(m: NewTreeMovement): string | undefined {
 
 function movementDocs(m: NewTreeMovement) {
   const href = documentHref(m);
-  return href ? [{ label: "Descargar PDF", href, filename: `${m.voucher}.pdf` }] : [];
+  return href ? [{ label: "Descargar PDF", href, filename: documentFilename("NEW_TREE", m.form, m.number || m.voucher, m.date) }] : [];
 }
 
 function money(value: number | null | undefined, currency: string | null | undefined): string {

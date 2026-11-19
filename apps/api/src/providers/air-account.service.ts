@@ -28,7 +28,25 @@ function flattenTables(html: string): AirAccountRow[] {
 }
 
 const AIR_HOSTS = ["www.air-intra.com", "air-intra.com"];
-export const AIR_PDF_URL = "https://www.air-intra.com/2025/pdf/index.php";
+/**
+ * Diagnóstico de una página de Air que vino sin tablas: de dónde trae los datos
+ * (URLs .php, llamadas ajax, formularios) y qué atributos usa. Sin importes:
+ * los dígitos sueltos se tapan.
+ */
+export function airPageShape(html: string): string {
+  const uniq = (xs: string[]) => [...new Set(xs)].slice(0, 25);
+  const urls = uniq([...html.matchAll(/["'`]([^"'`\s<>]*\.php(?:\?[^"'`\s<>]*)?)["'`]/gi)].map((m) => m[1]));
+  const calls = uniq([...html.matchAll(/(\$\.(?:ajax|post|get|getJSON)|\.load|fetch|XMLHttpRequest)\s*\(\s*([^)]{0,160})/g)].map((m) => `${m[1]}(${m[2].replace(/\s+/g, " ")})`));
+  const forms = uniq([...html.matchAll(/<form\b[^>]*>/gi)].map((m) => m[0]));
+  const inputs = uniq([...html.matchAll(/<(?:input|select)\b[^>]*\bname=["']([^"']+)["'][^>]*>/gi)].map((m) => m[1]));
+  const attrs = uniq([...html.matchAll(/\s([a-z][\w-]{2,30})=["'][^"']*["']/gi)].map((m) => m[1].toLowerCase()).filter((a) => !["class", "style", "href", "src", "type", "name", "value", "id", "rel", "content", "charset", "lang", "width", "height", "alt", "title"].includes(a)));
+  const ids = uniq([...html.matchAll(/\bid=["']([^"']+)["']/gi)].map((m) => m[1]));
+  const tags = uniq([...html.matchAll(/<([a-z][a-z0-9]*)\b/gi)].map((m) => m[1].toLowerCase()));
+  const mask = (s: string) => s.replace(/\d{3,}/g, "#");
+  return mask(JSON.stringify({ urls, calls, forms, inputs, attrs, ids, tags }));
+}
+
+export const AIR_PDF_URL ="https://www.air-intra.com/2025/pdf/index.php";
 
 /**
  * Facturas del listado «FV» de Air (el mismo que usa NODO para guardar las
@@ -120,6 +138,7 @@ export class AirAccountService {
     const rows = flattenTables(html);
     if (rows.length > 0) return { html, rows };
     if (tables.length === 0) {
+      this.log.log(`Cuenta Air, forma de «${label}»: ${airPageShape(html)}`);
       return {
         html,
         rows: [],

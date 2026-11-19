@@ -44,6 +44,7 @@ import { indexOpsAliases, isAliasable, parseOpsGroupKey, type OpsAliasKind } fro
 import { DEMO_DISTRIBUTORS, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { normalizeApprovalQuote } from "./approval-quote";
 import { buildLastPurchaseIndex, searchPurchaseHistory } from "./purchase-history";
+import { DOCUMENT_NAME_SELECT, storedDocumentFilename } from "../orders-api/document-filename";
 
 /**
  * Aprobar un pedido online es mandarlo al proveedor con los mismos datos con los
@@ -78,7 +79,7 @@ export class OrdersService {
   async document(tenant: TenantContext, orderId: string, documentId: string) {
     const doc = await this.prisma.providerOrderDocument.findFirst({
       where: { id: documentId, orderId, tenantId: tenant.tenantId },
-      select: { assetId: true },
+      select: { assetId: true, ...DOCUMENT_NAME_SELECT },
     });
     const asset = doc?.assetId
       ? await this.prisma.storedAsset.findFirst({
@@ -86,8 +87,8 @@ export class OrdersService {
           select: { mimeType: true, filename: true, data: true },
         })
       : null;
-    if (!asset) throw new NotFoundException("No encontramos ese comprobante");
-    return { mimeType: asset.mimeType, filename: asset.filename, data: Buffer.from(asset.data) };
+    if (!asset || !doc) throw new NotFoundException("No encontramos ese comprobante");
+    return { mimeType: asset.mimeType, filename: storedDocumentFilename(doc), data: Buffer.from(asset.data) };
   }
 
   pending(tenant: TenantContext) {

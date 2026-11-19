@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { documentFilename } from "@/lib/documentFilename";
 import {
   airAccountApi,
   airCheckoutApi,
@@ -288,7 +289,7 @@ function airDocs(row: AirRow): AccountDetailDoc[] {
   return links.map((l, i) => ({
     label: l.label && l.label !== l.href ? l.label : `Descargar ${i + 1}`,
     href: `/providers/AIR/documents?href=${encodeURIComponent(l.href)}`,
-    filename: l.label || "comprobante-air",
+    filename: documentFilename("AIR", String(row.Comprobante ?? l.label ?? ""), typeof row.Comprobante === "string" ? row.Comprobante : null, airRowDate(row)),
   }));
 }
 

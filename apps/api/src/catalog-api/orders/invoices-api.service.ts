@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { DOCUMENT_NAME_SELECT, storedDocumentFilename } from "../../orders-api/document-filename";
 import { Cron } from "@nestjs/schedule";
 import { Prisma } from "@prisma/client";
 import { providerLabel } from "@nodo/shared";
@@ -223,11 +224,11 @@ export class InvoicesApiService {
   async pdf(principal: ApiPrincipal, id: string): Promise<{ mimeType: string; filename: string; data: Buffer }> {
     await this.assertAllowed(principal);
     const tenantId = principal.tenantId;
-    const doc = await this.prisma.providerOrderDocument.findFirst({ where: { id, tenantId }, select: { assetId: true } });
+    const doc = await this.prisma.providerOrderDocument.findFirst({ where: { id, tenantId }, select: { assetId: true, ...DOCUMENT_NAME_SELECT } });
     if (!doc?.assetId) throw Errors.notFound("La factura");
     const asset = await this.prisma.storedAsset.findFirst({ where: { id: doc.assetId, ownerTenantId: tenantId }, select: { mimeType: true, filename: true, data: true } });
     if (!asset) throw Errors.notFound("La factura");
-    return { mimeType: asset.mimeType, filename: asset.filename, data: Buffer.from(asset.data) };
+    return { mimeType: asset.mimeType, filename: storedDocumentFilename(doc), data: Buffer.from(asset.data) };
   }
 
   /** El comprobante completo de cada estado publicado (API y webhooks). */

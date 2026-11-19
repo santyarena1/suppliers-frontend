@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { documentFilename } from "@/lib/documentFilename";
 import {
   newBytesAccountApi,
   newBytesCheckoutApi,
@@ -392,7 +393,7 @@ function nbVoucherDocs(m: NewBytesComprobante): AccountDetailDoc[] {
   return [{
     label: "Descargar comprobante",
     href: `/providers/NEW_BYTES/documents?voucherId=${encodeURIComponent(String(m.voucherId))}`,
-    filename: `nb-${m.invoiceNumber || m.voucherId}.pdf`,
+    filename: documentFilename("NEW_BYTES", m.invoiceType || "FACTURA", m.invoiceNumber || String(m.voucherId), m.invoiceDate),
   }];
 }
 

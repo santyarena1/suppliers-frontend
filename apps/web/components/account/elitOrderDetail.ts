@@ -1,4 +1,5 @@
 import type { AccountDetailDoc, AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { documentFilename } from "@/lib/documentFilename";
 import {
   addIva,
   emptyIvaAcc,
@@ -257,21 +258,21 @@ export function elitSaleNoteDocs(o: ElitSaleNote): AccountDetailDoc[] {
     docs.push({
       label: "Descargar nota de venta",
       href: `/providers/ELIT/documents?form=${encodeURIComponent(form)}&number=${encodeURIComponent(o.orderNumber)}&kind=salenote`,
-      filename: `nv-${o.orderNumber}.pdf`,
+      filename: documentFilename("ELIT", "NV", o.orderNumber, o.date),
     });
   }
   if (o.dispatchNotePdfUrl) {
     docs.push({
       label: "Descargar remito",
       href: `/providers/ELIT/documents?form=${encodeURIComponent(form)}&number=${encodeURIComponent(o.orderNumber)}&kind=dispatch`,
-      filename: `remito-${o.orderNumber}.pdf`,
+      filename: documentFilename("ELIT", "REMITO", o.orderNumber, o.date),
     });
   }
   if (hasInvoice(o)) {
     docs.push({
       label: "Descargar factura",
       href: `/providers/ELIT/documents?form=${encodeURIComponent("FACTURA A")}&number=${encodeURIComponent(o.invoiceNumber.trim())}`,
-      filename: `factura-${o.invoiceNumber.trim()}.pdf`,
+      filename: documentFilename("ELIT", "FACTURA", o.invoiceNumber.trim(), o.date),
     });
   } else {
     docs.push({ label: "Factura pendiente", pending: true });

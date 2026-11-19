@@ -740,7 +740,7 @@ function OrderCard({
           <OrderTimeline tracking={order.tracking} providerName={order.providerName} />
         )}
 
-        {!editing && <OrderDocuments orderId={order.id} documents={order.documents ?? []} />}
+        {!editing && <OrderDocuments orderId={order.id} provider={order.provider} documents={order.documents ?? []} />}
 
         {order.storefrontStatus && !esperando && !rechazado && (
           <StorefrontPurchaseStatus order={order} onUpdated={onUpdated} onAviso={onAviso} />

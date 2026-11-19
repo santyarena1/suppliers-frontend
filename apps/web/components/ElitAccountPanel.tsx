@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { documentFilename } from "@/lib/documentFilename";
 import {
   elitAccountApi,
   elitCheckoutApi,
@@ -386,7 +387,7 @@ function elitMovementDocs(m: ElitMovement): AccountDetailDoc[] {
   return [{
     label: `Descargar ${m.form}`,
     href: `/providers/ELIT/documents?form=${encodeURIComponent(m.form)}&number=${encodeURIComponent(m.number)}`,
-    filename: `${m.form}-${m.number}.pdf`,
+    filename: documentFilename("ELIT", m.form, m.number, m.date),
   }];
 }
 

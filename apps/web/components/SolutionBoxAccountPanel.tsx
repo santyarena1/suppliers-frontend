@@ -1,6 +1,7 @@
 "use client";
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
+import { documentFilename } from "@/lib/documentFilename";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { XCircle } from "lucide-react";
@@ -204,7 +205,7 @@ export default function SolutionBoxAccountPanel() {
           ]}
           items={sbOrderItems(detail.row)}
           totals={sbOrderTotals(detail.row)}
-          documents={invoiceHref(detail.row) ? [{ label: `Factura ${detail.row.invoice}`, href: invoiceHref(detail.row), filename: `factura-${detail.row.number}.pdf` }] : []}
+          documents={invoiceHref(detail.row) ? [{ label: `Factura ${detail.row.invoice}`, href: invoiceHref(detail.row), filename: documentFilename("SOLUTION_BOX", "FACTURA", detail.row.invoice || detail.row.number, detail.row.date) }] : []}
           note={detail.row.invoice ? undefined : "Todavía no hay factura para este pedido."}
           onClose={() => setDetail(null)}
         />

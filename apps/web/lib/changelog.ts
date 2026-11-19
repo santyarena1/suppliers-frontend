@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.1",
+    date: "2026-11-19",
+    title: "Facturas y remitos con nombre prolijo al descargar",
+    changes: [
+      { kind: "improved", text: "Las facturas, notas de crédito, remitos y notas de venta que bajás desde la cuenta de cada distribuidor se guardan con un nombre ordenado: distribuidor, tipo, número y fecha (por ejemplo «ELIT-FA-2000240284-2026-11-17.pdf»)." },
+    ],
+  },
+  {
     version: "2.29.0",
     date: "2026-11-19",
     title: "Proveedores más claros: estado real y pedidos con su etapa",
