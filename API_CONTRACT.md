@@ -1382,3 +1382,12 @@ pedido (carrito de NODO) no sirven como costo real de un pedido en esquema.
   - `GET /orders/:id/documents/:documentId`: el PDF (`inline`). 404 si no es de la organización.
 - **Estado**: IMPLEMENTADO
 - **Notas**: `generated: true` = PDF armado por NODO con los datos oficiales (New Bytes).
+
+### [FEATURE] Pagar el plan con Mercado Pago al precio del día — 2026-11-19
+- **Método**: POST
+- **Ruta**: `/my/subscription/mercadopago`
+- **Auth**: Bearer token requerido (comercio RETAILER; anda también con la suscripción suspendida)
+- **Body / Params**: nada
+- **Respuesta esperada**: `{ url, dynamic, amountUsd, amountArs, rate }`. Con `MERCADOPAGO_ACCESS_TOKEN` en el servidor, `url` es un Checkout Pro armado en el momento por la cuota vigente (plan o precio pactado + módulos) en pesos al dólar oficial (dolarapi, venta), `external_reference: nodo-sub:<tenantId>`. Sin token, `dynamic: false` y el link fijo de siempre.
+- **Estado**: IMPLEMENTADO
+- **Notas**: el pago todavía se registra con «Ya pagué» o desde el admin; falta el aviso automático de Mercado Pago (webhook).

@@ -25,6 +25,7 @@ import {
   SetupFeeDto,
 } from "./dto/subscription.dto";
 import { SubscriptionsService } from "./subscriptions.service";
+import { MercadoPagoCheckoutService } from "./mercadopago-checkout.service";
 
 /**
  * "Plan y facturación" del comercio (Tipo 1). Todo sigue andando con la
@@ -34,7 +35,16 @@ import { SubscriptionsService } from "./subscriptions.service";
 @AllowWhenRestricted()
 @Controller("my/subscription")
 export class MySubscriptionController {
-  constructor(private readonly subscriptions: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptions: SubscriptionsService,
+    private readonly mercadoPago: MercadoPagoCheckoutService
+  ) {}
+
+  /** Link de Mercado Pago con la cuota de hoy en pesos (dólar oficial del día). */
+  @Post("mercadopago")
+  mercadoPagoCheckout(@CurrentTenant() tenant: TenantContext) {
+    return this.mercadoPago.checkout(tenant);
+  }
 
   @Get()
   mine(@CurrentTenant() tenant: TenantContext) {

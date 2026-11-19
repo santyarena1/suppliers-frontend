@@ -134,6 +134,14 @@ export class SubscriptionsService {
   // ---------- Lectura ----------
 
   /** Lo que ve el comercio en "Plan y facturación". La cortesía se muestra como activa. */
+  /** Lo que el comercio paga por mes hoy (plan o precio pactado, más módulos), para armar el cobro. */
+  async chargeFor(tenant: TenantContext): Promise<{ plan: TenantPlan; planLabel: string; amountUsd: number }> {
+    if (tenant.tenantType !== "RETAILER") throw new NotFoundException("Esta organización no tiene suscripción");
+    const { tenantRow, sub } = await this.load(tenant.tenantId);
+    const view = this.toView(tenantRow, sub);
+    return { plan: view.plan, planLabel: view.planLabel, amountUsd: view.monthlyTotal };
+  }
+
   async mine(tenant: TenantContext) {
     if (tenant.tenantType !== "RETAILER") throw new NotFoundException("Esta organización no tiene suscripción");
     const { tenantRow, sub } = await this.load(tenant.tenantId);
