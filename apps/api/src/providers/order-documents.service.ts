@@ -46,6 +46,8 @@ const MAX_FETCH_PER_RUN = 40;
 const PER_PROVIDER_PER_RUN = 15;
 /** Un comprobante que falló se reintenta recién después de esto. */
 const RETRY_AFTER_MS = 6 * 3_600_000;
+/** El portal entrega el comprobante vacío: no se reintenta nunca (pedido del dueño, 19/11). */
+const EMPTY_FILE_ERROR = "el portal devolvió el archivo vacío";
 const FETCH_TIMEOUT_MS = 60_000;
 
 export type DocumentKind = "FACTURA" | "NOTA_CREDITO" | "NOTA_DEBITO" | "REMITO";
@@ -392,7 +394,7 @@ export class OrderDocumentsService {
     if (cands.length === 0) return { fetch: [], lines: [] };
     const existing = await this.prisma.providerOrderDocument.findMany({
       where: { tenantId, provider, portalRef: { in: cands.map((c) => c.portalRef) } },
-      select: { id: true, portalRef: true, orderId: true, assetId: true, fetchedAt: true, linesFetchedAt: true, kind: true },
+      select: { id: true, portalRef: true, orderId: true, assetId: true, fetchedAt: true, fetchError: true, linesFetchedAt: true, kind: true },
     });
     const byRef = new Map(existing.map((d) => [d.portalRef, d]));
     const now = Date.now();
@@ -405,7 +407,7 @@ export class OrderDocumentsService {
         continue;
       }
       if (c.orderId && !d.orderId) await this.prisma.providerOrderDocument.update({ where: { id: d.id }, data: { orderId: c.orderId, link: c.link } });
-      if (!d.assetId && (!d.fetchedAt || now - d.fetchedAt.getTime() > RETRY_AFTER_MS)) out.push(c);
+      if (!d.assetId && d.fetchError !== EMPTY_FILE_ERROR && (!d.fetchedAt || now - d.fetchedAt.getTime() > RETRY_AFTER_MS)) out.push(c);
       // Guardado antes de leer renglones: se completan sin volver a bajar el PDF.
       else if (d.assetId && !d.linesFetchedAt && d.kind !== "REMITO" && c.lines) lines.push({ c, id: d.id, assetId: d.assetId });
     }
@@ -462,7 +464,7 @@ export class OrderDocumentsService {
     let got: Fetched;
     try {
       got = await withTimeout(c.fetch(), FETCH_TIMEOUT_MS);
-      if (got.pdf.length === 0) throw new Error("el portal devolvió el archivo vacío");
+      if (got.pdf.length === 0) throw new Error(EMPTY_FILE_ERROR);
       if (got.pdf.length > MAX_PDF_BYTES) throw new Error("el PDF supera 15 MB");
     } catch (err) {
       await this.saveError(base, (err instanceof Error ? err.message : String(err)).slice(0, 300));

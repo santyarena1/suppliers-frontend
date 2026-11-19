@@ -111,9 +111,11 @@ describe("facturas y remitos desde los portales", () => {
 
     // Una factura suelta ya guardada con renglones: se vuelve a buscar su pedido sin ir al portal (parcial de NODO-o3).
     docs.push({ id: 'suelta', tenantId: 'tgs', provider: 'NEW_BYTES', portalRef: 'NB|99', orderId: null, kind: 'FACTURA', linesFetchedAt: new Date(), fechaEmision: '2026-11-15', lines: [{ codigo: '119024', cantidad: 1 }, { codigo: '102048', cantidad: 1 }] });
-    // Segunda vuelta: lo guardado no se vuelve a bajar y el error espera 6 horas.
+    // Segunda vuelta: lo guardado no se vuelve a bajar; el archivo vacío no se reintenta nunca.
     const again = await service.sync("tgs", new Date("2026-11-18T12:30:00Z"));
     expect(again.map((r) => r.saved + r.errors)).toEqual([0, 0, 0]);
+    expect(solutionBox.getInvoice).toHaveBeenCalledTimes(1);
+    await service.sync("tgs", new Date("2026-11-19T12:30:00Z"));
     expect(solutionBox.getInvoice).toHaveBeenCalledTimes(1);
     expect(docs.find((d) => d.id === "suelta")).toMatchObject({ orderId: "o3", link: "factura parcial del pedido" });
   });
