@@ -11,8 +11,10 @@ function fakePortal(stock: Record<string, number> = {}) {
   let cart: { code: string; qty: number }[] = [];
   const calls: string[] = [];
   const CSRF = "tok123";
+  const FORM_TOKEN = "form-tok-9";
 
   const page = () => `<html><body>
+<form id="buscador"><input type="hidden" name="_token_csrf" value="${FORM_TOKEN}"></form>
 <section class="checkout-invid" data-checkout-invid data-entrega-cotizada="" data-csrf="${CSRF}" data-moneda="US$" data-clave="" data-vence="0">
 ${cart.length === 0 ? "<p>Tu carrito está vacío</p>" : `<form id="checkout-formulario">
 <input type="hidden" name="direccion" id="checkout-direccion" value="7545">
@@ -59,8 +61,12 @@ ${cart.length === 0 ? "<p>Tu carrito está vacío</p>" : `<form id="checkout-for
   jest.spyOn(axios, "request").mockImplementation((async (config: { method?: string; url?: string; params?: Record<string, string | number>; data?: string }) => {
     const url = config.url ?? "";
     if (url.endsWith("/servicios.php") && config.params?.servicio === "sumar_a_carrito") {
-      const code = String(config.params.producto);
-      const qty = Number(config.params.cantidad);
+      // Desde el 18/11/2026: POST con producto, cantidad y _token_csrf; por GET no lee la cantidad.
+      const form = new URLSearchParams(config.data ?? "");
+      if (config.method !== "POST") return html(`<?xml version="1.0"?><datos><error><![CDATA[La cantidad debe ser un número positivo válido.]]></error></datos>`);
+      if (form.get("_token_csrf") !== FORM_TOKEN) return html(`<?xml version="1.0"?><datos><error><![CDATA[Token inválido]]></error></datos>`);
+      const code = String(form.get("producto"));
+      const qty = Number(form.get("cantidad"));
       calls.push(`sumar ${code}x${qty}`);
       if (code === "999") return html(`<?xml version="1.0"?><respuesta><error>El producto no existe</error></respuesta>`);
       const prev = cart.find((l) => l.code === code);

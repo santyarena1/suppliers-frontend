@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.29.6",
+    date: "2026-11-24",
+    title: "Los pedidos a Invid vuelven a funcionar",
+    changes: [
+      {
+        kind: "fixed",
+        text: "Invid cambió la forma de cargar productos en su carrito y NODO no podía armar ni confirmar pedidos. Ya se adaptó: podés verificar y confirmar pedidos a Invid como siempre.",
+      },
+    ],
+  },
+  {
     version: "2.29.5",
     date: "2026-11-19",
     title: "NODO Pro baja a USD 30 por mes",

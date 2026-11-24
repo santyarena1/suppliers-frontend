@@ -175,7 +175,9 @@ export function invidShortLines(
  * (`accion_invid` + `csrf`): `eliminar`, `cotizar` (valida stock e impuestos
  * y devuelve una `clave` que vence) y `confirmar` con esa clave. Ver
  * invid-checkout.parser.ts. Los productos se siguen cargando con
- * `servicios.php?servicio=sumar_a_carrito`.
+ * `servicios.php?servicio=sumar_a_carrito`, que desde el 18/11/2026 es POST
+ * (`producto`, `cantidad`, `_token_csrf` de la página); por GET responde
+ * «La cantidad debe ser un número positivo válido».
  */
 @Injectable()
 export class InvidOrderService {
@@ -318,15 +320,16 @@ export class InvidOrderService {
   }
 
   /** Vacía el carrito real de Invid para esta sesión antes de armar el pedido nuevo. */
-  private async clearCart(cookie: string): Promise<{ cookie: string; csrf: string | null }> {
+  private async clearCart(cookie: string): Promise<{ cookie: string; csrf: string | null; formToken: string | null }> {
     const cart = await this.cartPage(cookie);
     let current = cart.cookie;
     const csrf = cart.page.csrf;
+    const formToken = cart.page.formToken;
     let rows: { index: number; qty: number }[] = cart.page.rows;
-    if (rows.length === 0) return { cookie: current, csrf };
+    if (rows.length === 0) return { cookie: current, csrf, formToken };
     if (!csrf) {
       this.logger.warn(`Invid clearCart: ${rows.length} filas y la página no trae csrf`);
-      return { cookie: current, csrf };
+      return { cookie: current, csrf, formToken };
     }
     for (let i = 0; i < 60 && rows.length > 0; i++) {
       const removed = await this.action<{ carrito?: { items?: { indice: number; cantidad: number }[] } }>(
@@ -345,7 +348,7 @@ export class InvidOrderService {
       rows = Array.isArray(left) ? left.map((it) => ({ index: Number(it.indice), qty: Number(it.cantidad) || 1 })) : [];
     }
     if (rows.length > 0) this.logger.warn(`Invid clearCart: quedaron ${rows.length} filas sin poder sacar`);
-    return { cookie: current, csrf };
+    return { cookie: current, csrf, formToken };
   }
 
   /** Alícuota de cada producto según el catálogo de Invid (es del producto, igual para todos los comercios). */
@@ -381,9 +384,13 @@ export class InvidOrderService {
     return fixed;
   }
 
-  private async addItem(cookie: string, code: string, qty: number) {
-    const res = await this.request(cookie, "GET", `${SITE_BASE}/servicios.php`, {
-      params: { servicio: "sumar_a_carrito", producto: code, cantidad: qty },
+  private async addItem(cookie: string, code: string, qty: number, formToken: string | null) {
+    const body = new URLSearchParams({ producto: code, cantidad: String(qty) });
+    if (formToken) body.set("_token_csrf", formToken);
+    const res = await this.request(cookie, "POST", `${SITE_BASE}/servicios.php`, {
+      params: { servicio: "sumar_a_carrito" },
+      body: body.toString(),
+      accept: "application/xml, text/xml, */*",
     });
     const xml = res.data;
     const field = (tag: string) => xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`))?.[1] ?? "";
@@ -482,13 +489,15 @@ export class InvidOrderService {
       );
     }
 
-    cookie = (await this.clearCart(cookie)).cookie;
+    const cleared = await this.clearCart(cookie);
+    cookie = cleared.cookie;
+    if (!cleared.formToken) this.logger.warn("Invid: el carrito no trae _token_csrf; se intenta sumar sin token");
 
     const added: { code: string; qty: number; name: string }[] = [];
     const itemErrors: PreparedCart["itemErrors"] = [];
     for (const item of items) {
       try {
-        const res = await this.addItem(cookie, item.code, item.qty);
+        const res = await this.addItem(cookie, item.code, item.qty, cleared.formToken);
         cookie = res.cookie;
         added.push({ code: item.code, qty: item.qty, name: res.name });
       } catch (err) {

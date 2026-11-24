@@ -28,6 +28,8 @@ export interface InvidCheckoutAddress {
 
 export interface InvidCheckoutPage {
   csrf: string | null;
+  /** `_token_csrf` de los formularios del sitio (desde el 18/11/2026 lo pide `sumar_a_carrito`). */
+  formToken: string | null;
   rows: InvidCheckoutRow[];
   addresses: InvidCheckoutAddress[];
   deliveries: InvidRadioOption[];
@@ -122,7 +124,13 @@ export function parseInvidCheckoutPage(html: string): InvidCheckoutPage {
     if (value) expresoCompanies.push({ value, label: text(opt[2]) });
   }
 
-  return { csrf, rows: parseInvidCheckoutRows(html), addresses, deliveries, expresoCompanies, payments };
+  return { csrf, formToken: parseInvidFormToken(html), rows: parseInvidCheckoutRows(html), addresses, deliveries, expresoCompanies, payments };
+}
+
+/** Token `_token_csrf` que Invid pone en los formularios de cada página. */
+export function parseInvidFormToken(html: string): string | null {
+  const tag = html.match(/<input\b[^>]*name=["']_token_csrf["'][^>]*>/i)?.[0];
+  return (tag ? attr(tag, "value") : null) || null;
 }
 
 /** Renglón de `cotizacion.items` (POST `accion_invid=cotizar`). */
