@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
+import RetailStoresDialog from "@/components/providers/RetailStoresDialog";
 import StoreProvidersSection from "@/components/storefront/StoreProvidersSection";
 import AvailableProviders from "@/components/AvailableProviders";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -21,7 +22,7 @@ import UpsellNotice from "@/components/subscription/UpsellNotice";
 import { capabilityAllowed, invalidateSubscription, useSubscription } from "@/lib/subscription";
 import ProvidersTable, { providerRowState } from "@/components/providers/ProvidersTable";
 import HubKpis from "@/components/providers/HubKpis";
-import { FileSpreadsheet, Loader2, Plus } from "lucide-react";
+import { FileSpreadsheet, Loader2, Plus, Store } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
@@ -37,6 +38,7 @@ export default function ProveedoresPage() {
   const [syncResult, setSyncResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
   const pendingRunId = useRef<Partial<Record<string, string>>>({});
   const [createOpen, setCreateOpen] = useState(false);
+  const [storesOpen, setStoresOpen] = useState(false);
   const [enablingOwn, setEnablingOwn] = useState(false);
   const [ownError, setOwnError] = useState<string | null>(null);
   const tenantType = getTenant()?.type ?? null;
@@ -176,6 +178,16 @@ export default function ProveedoresPage() {
               <Plus className="w-3.5 h-3.5" /> Agregar proveedor
             </button>
           )}
+          {(admin || tenantType === "RETAILER") && (
+            <button
+              type="button"
+              onClick={() => setStoresOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 hover:text-white rounded-lg px-3 py-1.5 transition-all"
+              title="Sumar como proveedor un local de HardGamers o Compra Gamer"
+            >
+              <Store className="w-3.5 h-3.5" /> Sumar un local
+            </button>
+          )}
           {canEnableOwnList && !visible.some((p) => p.linked && isListProvider(p.provider)) && (
             <button
               type="button"
@@ -192,6 +204,7 @@ export default function ProveedoresPage() {
       </header>
 
       <AddSupplierDialog open={createOpen} onClose={() => setCreateOpen(false)} kind="provider" onConnected={() => void load(true)} />
+      <RetailStoresDialog open={storesOpen} onClose={() => setStoresOpen(false)} onChanged={() => void load(true)} />
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">

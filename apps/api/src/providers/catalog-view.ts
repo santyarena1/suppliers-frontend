@@ -1,5 +1,5 @@
 import type { ProviderSyncCache, TenantProductOffer } from "@prisma/client";
-import { resolveCatalogDisplay, type CatalogEnrichmentContext } from "../catalog/catalog-enrichment";
+import { normalizeBrandKey, normalizeCatalogLabel, resolveCatalogDisplay, type CatalogEnrichmentContext } from "../catalog/catalog-enrichment";
 import { displayedStock } from "./catalog-stock";
 
 /** Lo que la organización decidió para un proveedor y hay que aplicar al leer. */
@@ -12,6 +12,33 @@ export interface OfferRules {
    * ofertas materializadas desde la lista base (source BASE_LIST).
    */
   baseListDiscountPercent?: number;
+  /** Descuentos por marca y por categoría (claves de `listDiscountKey`); ganan sobre el general. */
+  listDiscountRules?: ListDiscountRules;
+}
+
+export interface ListDiscountRules {
+  byBrand: Record<string, number>;
+  byCategory: Record<string, number>;
+}
+
+/** Clave con la que se guarda y se compara un descuento por marca o categoría. */
+export function listDiscountKey(kind: "BRAND" | "CATEGORY", label: string): string {
+  return kind === "BRAND" ? normalizeBrandKey(label) : normalizeCatalogLabel(label);
+}
+
+/**
+ * Descuento sobre la lista base para un producto: el de su marca, si no el de su
+ * categoría, si no el general del vínculo.
+ */
+export function listDiscountPercent(rules: OfferRules, brand: string | null | undefined, category: string | null | undefined): number {
+  const r = rules.listDiscountRules;
+  if (r) {
+    const b = brand ? r.byBrand[listDiscountKey("BRAND", brand)] : undefined;
+    if (b != null) return b;
+    const c = category ? r.byCategory[listDiscountKey("CATEGORY", category)] : undefined;
+    if (c != null) return c;
+  }
+  return rules.baseListDiscountPercent ?? 0;
 }
 
 export const NO_RULES: OfferRules = { minStockThreshold: 0, zeroStockAction: "KEEP" };
@@ -57,7 +84,9 @@ export function toProductView(
   const { id: _id, updatedAt: _updatedAt, raw, ...ficha } = product;
   const rawStock = offer.stock;
   const display = resolveCatalogDisplay(product, enrichment);
-  const discount = offer.source === "BASE_LIST" ? rules.baseListDiscountPercent ?? 0 : 0;
+  const discount = offer.source === "BASE_LIST"
+    ? listDiscountPercent(rules, display.displayBrand ?? product.brand, display.displayCategory ?? product.category)
+    : 0;
 
   return {
     ...ficha,

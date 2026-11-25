@@ -31,6 +31,8 @@ interface CompragamerRaw {
 
 export interface CompragamerProduct {
   externalKey: string;
+  /** `id_producto` de Compra Gamer: arma el link del carrito (`listado_prod`). */
+  sourceId: number;
   name: string;
   price: number;
   inStock: boolean;
@@ -91,6 +93,7 @@ export class RetailCompragamerClient {
 
       out.push({
         externalKey: `compragamer:${id}`,
+        sourceId: id,
         name,
         price,
         inStock: Number(raw.stock ?? 0) > 0 && raw.vendible !== 0,

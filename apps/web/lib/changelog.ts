@@ -26,6 +26,25 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.30.0",
+    date: "2026-11-25",
+    title: "Sumá locales como proveedores, con tus descuentos",
+    changes: [
+      {
+        kind: "new",
+        text: "En Proveedores → «Sumar un local» elegís cualquiera de los locales que NODO lee (HardGamers, Compra Gamer y más) y aparece como un proveedor: lo ves en la búsqueda, en comparar precios y en el carrito.",
+      },
+      {
+        kind: "new",
+        text: "Descuentos por proveedor de lista o local: uno general y los que quieras por marca o por categoría (gana el de la marca, después el de la categoría). Están en la pestaña «Descuentos» de cada proveedor.",
+      },
+      {
+        kind: "new",
+        text: "Compra Gamer: desde el carrito de NODO abrís su carrito con los productos ya cargados; entrás con tu cuenta y pagás ahí.",
+      },
+    ],
+  },
+  {
     version: "2.29.6",
     date: "2026-11-24",
     title: "Los pedidos a Invid vuelven a funcionar",

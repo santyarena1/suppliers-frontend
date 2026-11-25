@@ -240,6 +240,10 @@ model Tenant {
   /// Compara el costo final con el precio publicado en esa web.
   ownRetailStoreId   String?
   ownRetailStore     RetailStore?           @relation("TenantOwnRetailStore", fields: [ownRetailStoreId], references: [id], onDelete: SetNull)
+  /// Proveedor que representa a un local de venta elegido por comercios (RetailSupplier).
+  retailSupplierOf   RetailSupplier?        @relation("RetailSupplierTenant")
+  /// Descuentos por categoría o marca sobre proveedores por lista.
+  listDiscountRules  ListDiscountRule[]
 
   @@index([type, active])
   @@index([mirrorsCommercialFromId])
@@ -2101,8 +2105,48 @@ model RetailStore {
   updatedAt    DateTime        @updatedAt
   products     RetailProduct[]
   ownerTenants Tenant[]        @relation("TenantOwnRetailStore")
+  /// Proveedor de NODO armado con este local, si algún comercio lo eligió.
+  retailSupplier RetailSupplier?
 
   @@index([active, name])
+}
+
+/// Un local de venta convertido en proveedor por lista (LIST_*): su catálogo se
+/// copia como lista base y cada comercio que lo elige pone sus descuentos.
+model RetailSupplier {
+  id               String      @id @default(uuid())
+  retailStoreId    String      @unique
+  retailStore      RetailStore @relation(fields: [retailStoreId], references: [id], onDelete: Cascade)
+  supplierTenantId String      @unique
+  supplierTenant   Tenant      @relation("RetailSupplierTenant", fields: [supplierTenantId], references: [id], onDelete: Cascade)
+  /// Última copia del catálogo del local a la lista base.
+  syncedAt         DateTime?
+  createdAt        DateTime    @default(now())
+}
+
+enum ListDiscountKind {
+  CATEGORY
+  BRAND
+}
+
+/// Descuento de un comercio sobre la lista base de un proveedor por lista, para
+/// una categoría o una marca. El general sigue en TenantLink.discountPercent.
+/// Gana el más específico: marca, después categoría, después el general.
+model ListDiscountRule {
+  id        String           @id @default(uuid())
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider  String
+  kind      ListDiscountKind
+  /// Normalizado (minúsculas, sin acentos) para comparar con la ficha.
+  key       String
+  label     String
+  percent   Decimal          @db.Decimal(6, 2)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([tenantId, provider, kind, key])
+  @@index([tenantId, provider])
 }
 
 model RetailProduct {

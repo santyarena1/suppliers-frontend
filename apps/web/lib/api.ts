@@ -725,6 +725,39 @@ export const suppliersApi = {
     ),
 };
 
+/** Local de venta que NODO lee (HardGamers, Compra Gamer...) y se puede sumar como proveedor. */
+export interface RetailStoreOption {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  products: number;
+  connected: boolean;
+  provider: Provider | null;
+  discountPercent: number | null;
+}
+
+export type ListDiscountKind = "CATEGORY" | "BRAND";
+
+export interface ListDiscounts {
+  provider: Provider;
+  general: number | null;
+  rules: { kind: ListDiscountKind; label: string; percent: number }[];
+  categories: { label: string; products: number }[];
+  brands: { label: string; products: number }[];
+}
+
+export const retailSuppliersApi = {
+  list: (q?: string) => api.get<RetailStoreOption[]>("/my/retail-suppliers", { params: { q: q || undefined } }),
+  connect: (storeId: string) => api.post<{ provider: Provider; name: string }>(`/my/retail-suppliers/${storeId}`),
+  disconnect: (storeId: string) => api.delete<{ ok: true }>(`/my/retail-suppliers/${storeId}`),
+  /** Carrito del local con estos productos (solo Compra Gamer). `url: null` = ese local no lo permite. */
+  cartLink: (provider: string, items: { externalId: string; qty: number }[]) =>
+    api.post<{ url: string | null; missing: string[] }>(`/my/retail-suppliers/cart-link/${encodeURIComponent(provider)}`, { items }),
+  discounts: (provider: string) => api.get<ListDiscounts>(`/my/list-discounts/${encodeURIComponent(provider)}`),
+  setDiscounts: (provider: string, body: { general: number | null; rules: ListDiscounts["rules"] }) =>
+    api.put<ListDiscounts>(`/my/list-discounts/${encodeURIComponent(provider)}`, body),
+};
+
 export interface ProviderMergeCandidate {
   id: string;
   name: string;

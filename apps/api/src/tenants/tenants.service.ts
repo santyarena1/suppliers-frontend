@@ -317,6 +317,8 @@ export class TenantsService {
         type: type ? type : { in: ["DISTRIBUTOR", "BRAND"] },
         // Las tiendas de comercios (Vender en NODO) no son proveedores para conectarse.
         storefrontOf: { is: null },
+        // Los locales scrapeados se suman desde «Sumar un local».
+        retailSupplierOf: { is: null },
         ...(query ? { name: { contains: query, mode: "insensitive" } } : {}),
       },
       select: { id: true, name: true, type: true, providerKey: true, managedByPlatform: true },

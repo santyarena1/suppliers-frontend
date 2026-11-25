@@ -21,7 +21,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
-import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules, type ProductView } from "./catalog-view";
+import { fichaRaw, NO_RULES, toProductView, toSheetView, type ListDiscountRules, type OfferRules, type ProductView } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import {
@@ -1712,18 +1712,21 @@ export class ProvidersService implements OnModuleInit {
 
   /** Umbral de stock y descuento de lista configurados por la organización para un proveedor. */
   private async rulesFor(tenantId: string, provider: Provider): Promise<OfferRules> {
-    const [config, baseListDiscountPercent] = await Promise.all([
+    const [config, baseListDiscountPercent, discountRules] = await Promise.all([
       this.prisma.providerSyncConfig.findUnique({
         where: { tenantId_provider: { tenantId, provider } },
         select: { minStockThreshold: true, zeroStockAction: true },
       }),
       this.baseListDiscountFor(tenantId, provider),
+      isListProviderKey(provider) ? this.listDiscountRulesFor(tenantId, provider) : Promise.resolve(new Map<string, ListDiscountRules>()),
     ]);
-    if (!config) return { ...NO_RULES, baseListDiscountPercent };
+    const listDiscountRules = discountRules.get(provider);
+    if (!config) return { ...NO_RULES, baseListDiscountPercent, listDiscountRules };
     return {
       minStockThreshold: config.minStockThreshold || 0,
       zeroStockAction: config.zeroStockAction || "KEEP",
       baseListDiscountPercent,
+      listDiscountRules,
     };
   }
 
@@ -1740,9 +1743,24 @@ export class ProvidersService implements OnModuleInit {
     return Number(link?.discountPercent) || 0;
   }
 
+  /** Descuentos por marca y categoría que el comercio cargó, por proveedor. */
+  private async listDiscountRulesFor(tenantId: string, provider?: string): Promise<Map<string, ListDiscountRules>> {
+    const rows = await this.prisma.listDiscountRule.findMany({
+      where: { tenantId, ...(provider ? { provider } : {}) },
+      select: { provider: true, kind: true, key: true, percent: true },
+    });
+    const out = new Map<string, ListDiscountRules>();
+    for (const r of rows) {
+      const entry = out.get(r.provider) ?? { byBrand: {}, byCategory: {} };
+      (r.kind === "BRAND" ? entry.byBrand : entry.byCategory)[r.key] = Number(r.percent) || 0;
+      out.set(r.provider, entry);
+    }
+    return out;
+  }
+
   /** Igual que `rulesFor` pero para varios proveedores de una, en las vistas mezcladas. */
   async rulesByProvider(tenantId: string): Promise<Map<string, OfferRules>> {
-    const [configs, listLinks] = await Promise.all([
+    const [configs, listLinks, discountRules] = await Promise.all([
       this.prisma.providerSyncConfig.findMany({
         where: { tenantId },
         select: { provider: true, minStockThreshold: true, zeroStockAction: true },
@@ -1755,6 +1773,7 @@ export class ProvidersService implements OnModuleInit {
         },
         select: { discountPercent: true, supplierTenant: { select: { providerKey: true } } },
       }),
+      this.listDiscountRulesFor(tenantId),
     ]);
     const discountByProvider = new Map(
       listLinks.map((l) => [l.supplierTenant.providerKey ?? "", Number(l.discountPercent) || 0])
@@ -1766,11 +1785,14 @@ export class ProvidersService implements OnModuleInit {
           minStockThreshold: c.minStockThreshold || 0,
           zeroStockAction: c.zeroStockAction || "KEEP",
           baseListDiscountPercent: discountByProvider.get(c.provider) ?? 0,
+          listDiscountRules: discountRules.get(c.provider),
         },
       ])
     );
     for (const [provider, discount] of discountByProvider) {
-      if (provider && !rules.has(provider)) rules.set(provider, { ...NO_RULES, baseListDiscountPercent: discount });
+      if (provider && !rules.has(provider)) {
+        rules.set(provider, { ...NO_RULES, baseListDiscountPercent: discount, listDiscountRules: discountRules.get(provider) });
+      }
     }
     return rules;
   }

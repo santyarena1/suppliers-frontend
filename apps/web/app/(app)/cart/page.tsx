@@ -63,6 +63,7 @@ import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import StorefrontCartAction from "@/components/storefront/StorefrontCartAction";
+import RetailCartLinkButton from "@/components/cart/RetailCartLinkButton";
 import { capabilityAllowed, useSubscription } from "@/lib/subscription";
 import { csvText } from "@/lib/csv";
 import { PurchaseHistoryButton } from "@/components/orders/PurchaseHistorySearch";
@@ -1299,6 +1300,11 @@ function CartPageInner() {
                       <p className="text-xs text-sky-200/80">
                         {myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.
                       </p>
+                      <RetailCartLinkButton
+                        provider={activeTab}
+                        name={myProviders.find((mp) => mp.provider === activeTab)?.name ?? providerLabel(activeTab)}
+                        items={viewItems.filter((it) => it.provider === activeTab).map((it) => ({ externalId: it.externalId, qty: it.qty }))}
+                      />
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"

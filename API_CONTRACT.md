@@ -1399,3 +1399,23 @@ pedido (carrito de NODO) no sirven como costo real de un pedido en esquema.
 - **Respuesta esperada**: cada `renglones[]` suma `part_number` y `ean` (string | null), del catálogo del distribuidor que tiene NODO (mismo proveedor + `codigo`). Sirve para reconocer el producto en el sistema del comercio aunque la factura solo traiga el código interno del distribuidor.
 - **Estado**: IMPLEMENTADO
 - **Notas**: INVOICE_SCHEMA 3. Al subir el esquema, cada factura que cambió sale con versión nueva y `actualizado` de ahora (sin aviso), así quien consulta con `desde` la vuelve a leer.
+
+### [FEATURE] Locales de venta como proveedor, con descuentos — 2026-11-25
+- **Método**: GET · POST · DELETE · PUT
+- **Ruta**:
+  - `GET /my/retail-suppliers?q=` — locales que NODO lee (HardGamers, Compra Gamer…)
+  - `POST /my/retail-suppliers/:storeId` — sumarlo como proveedor
+  - `DELETE /my/retail-suppliers/:storeId` — quitarlo
+  - `POST /my/retail-suppliers/cart-link/:provider` — link al carrito del local (solo Compra Gamer)
+  - `GET|PUT /my/list-discounts/:provider` — descuentos sobre cualquier proveedor por lista vinculado
+- **Auth**: Bearer token requerido (organización de la sesión)
+- **Body / Params**:
+  - cart-link: `{ items: { externalId, qty }[] }`
+  - PUT descuentos: `{ general: number|null, rules: { kind: "BRAND"|"CATEGORY", label, percent }[] }` (0–90; reemplaza todas las reglas)
+- **Respuesta esperada**:
+  - listado: `{ id, name, logoUrl, products, connected, provider, discountPercent }[]` (conectados primero)
+  - sumar: `{ provider, name }`
+  - cart-link: `{ url: string|null, missing: externalId[] }`
+  - descuentos: `{ provider, general, rules[], categories: {label, products}[], brands: {label, products}[] }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: cada local elegido es un proveedor por lista `LIST_RETAIL_*` sin dueño (tabla `RetailSupplier`), fuera del directorio y de la búsqueda de proveedores. Su catálogo se copia del scrapeo como lista base (precio publicado = finalPrice con IVA 21 %, ARS) y se refresca cada hora si el local cambió. El descuento se aplica al leer: marca > categoría > general (`TenantLink.discountPercent`). Link de Compra Gamer: `https://compragamer.com/carro-compras?listado_prod=cant-idProducto,...`.

@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { resolveCatalogDisplay, type CatalogEnrichmentContext } from "../../catalog/catalog-enrichment";
 import { CatalogEnrichmentService } from "../../catalog/catalog-enrichment.service";
-import { NO_RULES, fichaRaw, type OfferRules } from "../../providers/catalog-view";
+import { NO_RULES, fichaRaw, listDiscountPercent, type OfferRules } from "../../providers/catalog-view";
 import { galleryFromRaw } from "./gallery";
 import { displayedStock } from "../../providers/catalog-stock";
 import { ProvidersService } from "../../providers/providers.service";
@@ -236,7 +236,10 @@ export function toRow(
   saleRules?: TenantSaleRules
 ): CatalogRow | null {
   const p = offer.product;
-  const discount = offer.source === "BASE_LIST" ? rules.baseListDiscountPercent ?? 0 : 0;
+  const shown = resolveCatalogDisplay(p, enrichment);
+  const discount = offer.source === "BASE_LIST"
+    ? listDiscountPercent(rules, shown.displayBrand ?? p.brand, shown.displayCategory ?? p.category)
+    : 0;
   const applyDiscount = (v: unknown) => {
     const n = num(v);
     return n == null ? null : discount ? n * (1 - discount / 100) : n;

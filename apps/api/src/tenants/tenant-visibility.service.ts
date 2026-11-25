@@ -294,7 +294,8 @@ export class TenantVisibilityService {
     if (providerDirectoryOpen()) {
       const directorio = await this.prisma.tenant.findMany({
         // Las tiendas de comercios no van al directorio: se ven solo si el comercio las acepta.
-        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null }, storefrontOf: { is: null } },
+        // Los locales scrapeados tampoco: se eligen desde «Locales como proveedor».
+        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null }, storefrontOf: { is: null }, retailSupplierOf: { is: null } },
         select: { id: true, name: true, providerKey: true },
       });
       const withCatalog = await this.providersWithCatalog(
@@ -326,7 +327,8 @@ export class TenantVisibilityService {
     const platformAdminOrg = await this.isPlatformAdminOrg(tenantId, viewerUserId);
     if (platformAdminOrg) {
       const distribuidores = await this.prisma.tenant.findMany({
-        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
+        // Los locales scrapeados no: los ve solo si los eligió como proveedor.
+        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null }, retailSupplierOf: { is: null } },
         select: { id: true, name: true, providerKey: true },
       });
       for (const d of distribuidores) {

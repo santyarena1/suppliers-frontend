@@ -26,6 +26,7 @@ import { AdminModule } from "./admin/admin.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { ChatModule } from "./chat/chat.module";
 import { RetailModule } from "./retail/retail.module";
+import { RetailSupplierModule } from "./retail-supplier/retail-supplier.module";
 import { AssetsModule } from "./assets/assets.module";
 import { ImagesModule } from "./images/images.module";
 import { PlatformContentModule } from "./platform-content/platform-content.module";
@@ -75,6 +76,7 @@ import { EnrichmentModule } from "./enrichment/enrichment.module";
     TenantsModule,
     ChatModule,
     RetailModule,
+    RetailSupplierModule,
     AssetsModule,
     ImagesModule,
     PlatformContentModule,

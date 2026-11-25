@@ -208,6 +208,7 @@ export class RetailIngestService implements OnModuleInit {
           price: new Prisma.Decimal(item.price),
           searchText: normalizeSearchText(item.name),
           active: item.inStock,
+          raw: { compragamerId: item.sourceId },
           syncedAt: new Date(),
         },
         update: {
@@ -216,6 +217,7 @@ export class RetailIngestService implements OnModuleInit {
           price: new Prisma.Decimal(item.price),
           searchText: normalizeSearchText(item.name),
           active: item.inStock,
+          raw: { compragamerId: item.sourceId },
           syncedAt: new Date(),
         },
         select: { id: true },

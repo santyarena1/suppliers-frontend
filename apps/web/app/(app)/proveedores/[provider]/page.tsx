@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import NodoOrdersPanel from "@/components/list-import/NodoOrdersPanel";
+import ListDiscountsPanel from "@/components/providers/ListDiscountsPanel";
 import { freshnessLabel, useListFreshness } from "@/lib/listFreshness";
 import { isAdmin } from "@/lib/auth";
 import { useCan } from "@/lib/permissions";
@@ -62,10 +63,10 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "resumen" | "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "margins" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
+type ProviderTab = "resumen" | "lists" | "descuentos" | "orders" | "credentials" | "sync" | "catalog" | "config" | "margins" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "resumen", "lists", "orders", "credentials", "sync", "config", "margins", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
+  "resumen", "lists", "descuentos", "orders", "credentials", "sync", "config", "margins", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -553,6 +554,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   {[
                     ...(demo ? [] : [{ key: "resumen" as const, label: "Resumen" }]),
                     ...(listPriced ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }] : []),
+                    ...(listBased && isRetailer && !demo ? [{ key: "descuentos" as const, label: "Descuentos", shortLabel: "Desc." }] : []),
                     ...((listBased || spreadsheet) && !demo
                       ? []
                       : [{ key: "sync" as const, label: "Actualizaciones", shortLabel: "Sync" }]),
@@ -597,6 +599,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 )}
 
                 {tab === "orders" && listPriced && <NodoOrdersPanel provider={provider} />}
+                {tab === "descuentos" && listBased && isRetailer && !demo && <ListDiscountsPanel provider={provider} />}
 
                 {demo && tab === "lists" && <DemoListsPanel providerName={providerLabel(provider)} />}
                 {tab === "lists" && listPriced && !demo && (
