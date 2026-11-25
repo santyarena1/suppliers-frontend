@@ -10,7 +10,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 
 /** IVA con el que se separa el neto del precio publicado (los locales publican con IVA). */
-const RETAIL_IVA = 21;
 const MAX_DISCOUNT = 90;
 const CHUNK = 200;
 
@@ -241,9 +240,10 @@ export class RetailSupplierService {
         productUrl: p.productUrl ?? undefined,
         imageUrl: p.imageUrl ?? undefined,
         finalPrice: round4(finalPrice),
-        price: round4(finalPrice / (1 + RETAIL_IVA / 100)),
+        // Precio de venta al público: el IVA ya está adentro y no se discrimina
+        // (sin alícuota, NODO lo muestra igual con o sin IVA).
+        price: round4(finalPrice),
         currency: p.currency || "ARS",
-        ivaPercent: RETAIL_IVA,
         stockStatus: "Publicado en el local",
         raw: { retailExternalId: p.externalId, ...compragamerRaw(p.raw) },
       }];
@@ -257,7 +257,7 @@ export class RetailSupplierService {
             price: item.price,
             finalPrice: item.finalPrice,
             currency: item.currency,
-            ivaPercent: item.ivaPercent,
+            ivaPercent: null,
             stock: null,
             stockStatus: item.stockStatus,
           };

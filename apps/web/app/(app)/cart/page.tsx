@@ -225,6 +225,8 @@ function CartPageInner() {
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmingOffline, setConfirmingOffline] = useState(false);
   const [confirmingList, setConfirmingList] = useState<string | null>(null);
+  /** Locales con carrito por link (Compra Gamer) para lo que hay en el carrito. */
+  const [retailCartReady, setRetailCartReady] = useState<Record<string, boolean>>({});
   // Proveedores cuyos precios salen de una lista: el carrito no compra en ningún portal, arma un mensaje.
   const pricesFromList = (p: string) => providerPricesFromList(p, policies[p]?.priceChannel);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -816,9 +818,9 @@ function CartPageInner() {
   }
 
   /** Proveedor que cotiza por lista: se registra en Nodo con el modo de precio de cada línea y se copia el mensaje. */
-  async function confirmListOrder(provider: string) {
+  async function confirmListOrder(provider: string, opts: { retailCart?: boolean } = {}): Promise<boolean> {
     const groups = messageOrdersFromCart(viewItems, policies, provider, currentRate?.venta);
-    if (groups.length === 0) return;
+    if (groups.length === 0) return false;
     setConfirmingList(provider);
     setNotice(null);
     const store = myProviders.find((mp) => mp.provider === provider);
@@ -827,6 +829,15 @@ function CartPageInner() {
       const held = heldForApproval(res.data);
       clearProvider(provider, channelTab);
       setActiveTab("all");
+      // Local con carrito por link: el pedido queda en NODO y la compra se termina en su web.
+      if (opts.retailCart) {
+        setNotice(
+          held
+            ? `Pedido guardado, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, armás el carrito en ${store?.name ?? "el local"}.`
+            : `Pedido guardado en Nodo. Se abrió ${store?.name ?? "el local"} con los productos cargados: terminá la compra ahí.`
+        );
+        return !held;
+      }
       // Tienda de otro comercio: el pedido le llega por NODO y la tienda lo confirma.
       if (store?.storefront) {
         setNotice(
@@ -834,13 +845,15 @@ function CartPageInner() {
             ? `Pedido guardado, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, le llega a ${store.name}.`
             : `Le enviamos el pedido a ${store.name}. Te avisamos cuando lo confirme; lo seguís en Pedidos.`
         );
-        return;
+        return true;
       }
       if (!held) await copySellerMessage();
       setNotice(held ? "Pedido guardado en Nodo, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, lo ves en Pedidos y ahí copiás el mensaje para el vendedor." : "Pedido guardado en Nodo. El mensaje quedó copiado para mandárselo al vendedor. Si cambia algo, lo editás en Pedidos.");
+      return true;
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setNotice(msg || "No se pudo guardar el pedido");
+      return false;
     } finally {
       setConfirmingList(null);
     }
@@ -1298,13 +1311,21 @@ function CartPageInner() {
                   {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && !myProviders.find((mp) => mp.provider === activeTab)?.storefront && (
                     <div className="cart-action flex flex-col gap-2">
                       <p className="text-xs text-sky-200/80">
-                        {myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.
+                        {activeTab.startsWith("LIST_RETAIL_")
+                          ? retailCartReady[activeTab]
+                            ? `${myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} es un local: armás el carrito en su web y el pedido queda guardado en Nodo.`
+                            : `${myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} es un local: el pedido se guarda en Nodo para que lleves la cuenta; la compra la hacés en su web.`
+                          : `${myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.`}
                       </p>
                       <RetailCartLinkButton
                         provider={activeTab}
                         name={myProviders.find((mp) => mp.provider === activeTab)?.name ?? providerLabel(activeTab)}
                         items={viewItems.filter((it) => it.provider === activeTab).map((it) => ({ externalId: it.externalId, qty: it.qty }))}
+                        onReady={(ready) => setRetailCartReady((prev) => (prev[activeTab] === ready ? prev : { ...prev, [activeTab]: ready }))}
+                        onOrder={() => confirmListOrder(activeTab, { retailCart: true })}
+                        disabled={confirmingList !== null}
                       />
+                      {!retailCartReady[activeTab] && (
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -1324,6 +1345,7 @@ function CartPageInner() {
                           Solo copiar mensaje
                         </button>
                       </div>
+                      )}
                     </div>
                   )}
 

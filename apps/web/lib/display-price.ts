@@ -109,6 +109,8 @@ export function displayTaxBadge(
   product: TaxableProduct,
   opts: DisplayTaxOpts
 ): string {
+  // Locales de venta: precio al público, el IVA ya viene adentro.
+  if (isRetailStorePrice(product)) return "IVA incl.";
   const lines = extractTaxLines(product);
   const iva = taxByKind(lines, "iva");
   const internos = taxByKind(lines, "internos");
@@ -155,4 +157,10 @@ export function displayTaxTitle(opts: DisplayTaxOpts): string {
   if (opts.withIva) return "Con IVA (sin percepciones)";
   if (opts.withIibb) return "Neto + percepciones (sin IVA)";
   return "Precio neto";
+}
+
+/** Producto de un local de venta (LIST_RETAIL_*): su precio ya trae el IVA. */
+export function isRetailStorePrice(product: TaxableProduct): boolean {
+  const raw = product.raw;
+  return Boolean(raw && typeof raw === "object" && !Array.isArray(raw) && "retailExternalId" in raw);
 }

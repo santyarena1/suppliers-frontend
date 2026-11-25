@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.31.0",
+    date: "2026-11-25",
+    title: "Armar carrito en Compra Gamer queda como pedido en NODO",
+    changes: [
+      {
+        kind: "new",
+        text: "En el carrito, «Armar carrito en Compra Gamer» guarda el pedido en NODO y abre su web con los productos cargados. Lo ves en Pedidos como cualquier otro.",
+      },
+      {
+        kind: "fixed",
+        text: "Los precios de los locales se muestran como los publican, con el IVA adentro: no cambian al ver precios con o sin IVA y dicen «IVA incl.».",
+      },
+    ],
+  },
+  {
     version: "2.30.4",
     date: "2026-11-25",
     title: "Se guarda el envío del proveedor y los locales tienen logo",
