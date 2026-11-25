@@ -28,6 +28,17 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "2.30.1",
     date: "2026-11-25",
+    title: "Los locales sumados muestran todo su catálogo",
+    changes: [
+      {
+        kind: "fixed",
+        text: "Al sumar un local, sus productos ya no quedan ocultos por «sin stock» (los locales solo publican lo que tienen) y la pantalla no te deja esperando: el catálogo se copia en un par de minutos.",
+      },
+    ],
+  },
+  {
+    version: "2.30.0",
+    date: "2026-11-25",
     title: "Sumá locales como proveedores, con tus descuentos",
     changes: [
       {
