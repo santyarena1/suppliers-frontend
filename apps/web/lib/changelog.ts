@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.31.1",
+    date: "2026-11-25",
+    title: "Los locales sumados muestran su logo en todo NODO",
+    changes: [
+      {
+        kind: "fixed",
+        text: "El logo de un local sumado como proveedor ahora se ve también en tu lista de proveedores, la búsqueda y el carrito.",
+      },
+    ],
+  },
+  {
     version: "2.31.0",
     date: "2026-11-25",
     title: "Armar carrito en Compra Gamer queda como pedido en NODO",

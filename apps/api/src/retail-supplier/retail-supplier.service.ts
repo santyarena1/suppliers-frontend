@@ -222,10 +222,17 @@ export class RetailSupplierService {
   async syncSupplier(retailSupplierId: string) {
     const supplier = await this.prisma.retailSupplier.findUniqueOrThrow({
       where: { id: retailSupplierId },
-      select: { id: true, retailStoreId: true, supplierTenantId: true, supplierTenant: { select: { providerKey: true } } },
+      select: {
+        id: true,
+        retailStoreId: true,
+        supplierTenantId: true,
+        supplierTenant: { select: { providerKey: true } },
+        retailStore: { select: { logoUrl: true } },
+      },
     });
     const provider = supplier.supplierTenant.providerKey as Provider;
     const startedAt = new Date();
+    await this.syncLogo(provider, supplier.retailStore.logoUrl);
     const products = await this.prisma.retailProduct.findMany({
       where: { storeId: supplier.retailStoreId, active: true },
       select: { externalId: true, name: true, price: true, currency: true, productUrl: true, imageUrl: true, categoryName: true, raw: true },
@@ -287,6 +294,18 @@ export class RetailSupplierService {
       .catch((err) => this.logger.warn(`Marcas de ${provider}: ${msg(err)}`));
     await this.prisma.retailSupplier.update({ where: { id: supplier.id }, data: { syncedAt: startedAt } });
     this.logger.log(`Local ${provider}: ${items.length} productos copiados, ${gone.length} dados de baja`);
+  }
+
+  /** El logo del local es el del proveedor en todo NODO. Uno cargado a mano en Administración no se pisa. */
+  private async syncLogo(provider: string, logoUrl: string | null) {
+    if (!logoUrl) return;
+    const current = await this.prisma.providerDisplayConfig.findUnique({ where: { provider }, select: { logoUrl: true } });
+    if (current?.logoUrl) return;
+    await this.prisma.providerDisplayConfig.upsert({
+      where: { provider },
+      create: { provider, logoUrl },
+      update: { logoUrl },
+    });
   }
 
   private async materializeLinked(retailSupplierId: string) {
