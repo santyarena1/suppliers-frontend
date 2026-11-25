@@ -54,6 +54,12 @@ export class ProviderPaymentOptionDto {
 
 /** Una forma de envío con su valor por pedido. Sirve para estimar el envío. */
 export class ProviderShippingMethodDto {
+  /** La web lo manda tal como lo recibió; el servidor lo vuelve a armar desde el nombre. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  id?: string;
+
   @IsString()
   @MinLength(1)
   @MaxLength(60)

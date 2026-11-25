@@ -9,6 +9,7 @@ import { RetailSchedulerService } from "./retail-scheduler.service";
 import { RetailController } from "./retail.controller";
 import { OwnStoreController } from "./own-store.controller";
 import { OwnStoreService } from "./own-store.service";
+import { RetailLogosService } from "./retail-logos.service";
 
 @Module({
   imports: [TenantsModule],
@@ -21,6 +22,7 @@ import { OwnStoreService } from "./own-store.service";
     RetailSearchService,
     RetailSchedulerService,
     OwnStoreService,
+    RetailLogosService,
   ],
   exports: [RetailSearchService, RetailIngestService],
 })

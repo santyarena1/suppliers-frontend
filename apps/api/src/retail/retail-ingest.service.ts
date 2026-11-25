@@ -806,7 +806,8 @@ export class RetailIngestService implements OnModuleInit {
       },
       update: {
         name,
-        logoUrl,
+        // Si la fuente no trae logo, se queda el que le encontró RetailLogosService.
+        ...(logoUrl ? { logoUrl } : {}),
         active: true,
         // Siempre el divisor correcto (nunca confiar en un auto-detect viejo)
         priceDivisor: divisor,

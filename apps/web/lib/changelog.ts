@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.30.4",
+    date: "2026-11-25",
+    title: "Se guarda el envío del proveedor y los locales tienen logo",
+    changes: [
+      {
+        kind: "fixed",
+        text: "Guardar la configuración de un proveedor con formas de envío cargadas daba «Error de validación». Ya se guarda.",
+      },
+      {
+        kind: "improved",
+        text: "Los locales de venta muestran su logo al sumarlos y en tus proveedores.",
+      },
+    ],
+  },
+  {
     version: "2.30.3",
     date: "2026-11-25",
     title: "Los locales de venta, también en «Agregar proveedor»",
