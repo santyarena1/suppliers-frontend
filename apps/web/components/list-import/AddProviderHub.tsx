@@ -10,8 +10,10 @@ import {
   invalidateMyProviders,
   loadMyProviders,
   myApi,
+  retailSuppliersApi,
   storefrontApi,
   suppliersApi,
+  type RetailStoreOption,
   type StorefrontInvitePreview,
   type StorefrontOffer,
   type VisibleProvider,
@@ -23,7 +25,8 @@ import { apiError } from "@/lib/storefront";
 /**
  * Primer paso de "Agregar proveedor" para un comercio: todo lo que puede sumar en
  * un solo lugar. Distribuidores que ya están en NODO, locales que venden en NODO
- * (tiendas públicas) y, con un código o un link, distribuidores y tiendas privadas.
+ * (tiendas públicas), locales de venta que NODO lee (HardGamers, Compra Gamer) y,
+ * con un código o un link, distribuidores y tiendas privadas.
  */
 export default function AddProviderHub({
   onClose,
@@ -43,6 +46,7 @@ export default function AddProviderHub({
   const [q, setQ] = useState("");
   const [providers, setProviders] = useState<VisibleProvider[] | null>(null);
   const [stores, setStores] = useState<StorefrontOffer[] | null>(null);
+  const [retail, setRetail] = useState<RetailStoreOption[] | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +63,21 @@ export default function AddProviderHub({
       alive = false;
     };
   }, []);
+
+  // Locales de venta: son cientos, así que la búsqueda la hace el servidor.
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(() => {
+      retailSuppliersApi
+        .list(q.trim())
+        .then((r) => alive && setRetail(r.data.filter((s) => !s.connected)))
+        .catch(() => alive && setRetail([]));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [q]);
 
   const needle = q.trim().toLowerCase();
   const shownProviders = useMemo(
@@ -101,6 +120,18 @@ export default function AddProviderHub({
     }
   }
 
+  async function connectRetail(s: RetailStoreOption) {
+    setWorking(`retail:${s.id}`);
+    setError(null);
+    try {
+      const res = await retailSuppliersApi.connect(s.id);
+      done(`/proveedores/${encodeURIComponent(res.data.provider)}?tab=descuentos`);
+    } catch (err) {
+      setError(apiError(err, "No se pudo sumar el local"));
+      setWorking(null);
+    }
+  }
+
   async function acceptStore(s: StorefrontOffer) {
     setWorking(s.storefrontId);
     setError(null);
@@ -114,7 +145,9 @@ export default function AddProviderHub({
   }
 
   const loading = providers === null || stores === null;
-  const nothing = !loading && shownProviders.length === 0 && shownStores.length === 0 && alreadyHave.length === 0;
+  const shownRetail = retail ?? [];
+  const nothing =
+    !loading && shownProviders.length === 0 && shownStores.length === 0 && alreadyHave.length === 0 && shownRetail.length === 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -221,6 +254,53 @@ export default function AddProviderHub({
                         className="flex flex-shrink-0 items-center gap-1 text-[11px] font-semibold bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white rounded-md px-2.5 py-1.5"
                       >
                         {working === s.storefrontId ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Sumar
+                      </button>
+                    ) : (
+                      <span className="flex-shrink-0 text-[11px] text-surface-500">Lo decide quien maneja los proveedores</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {shownRetail.length > 0 && (
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-surface-500 mb-1">
+                Locales de venta — {shownRetail.length}
+              </h3>
+              <p className="text-[11px] text-surface-500 mb-2">
+                No son distribuidores: son locales que venden al público (los que NODO lee de HardGamers y Compra Gamer). Ves su
+                precio publicado, con IVA, y le podés cargar un descuento general o por marca o categoría.
+              </p>
+              <div className="border border-surface-800 rounded-xl divide-y divide-surface-800 max-h-56 overflow-y-auto">
+                {shownRetail.map((s) => (
+                  <div key={s.id} className="flex items-center gap-3 px-3 py-2.5">
+                    {s.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.logoUrl} alt="" className="h-8 w-8 rounded-md object-contain bg-white/5 flex-shrink-0" />
+                    ) : (
+                      <div className="h-8 w-8 rounded-md bg-surface-800 flex items-center justify-center flex-shrink-0">
+                        <Store className="h-4 w-4 text-surface-500" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-surface-100 truncate flex items-center gap-1.5">
+                        {s.name}
+                        <span className="flex-shrink-0 text-[10px] font-medium uppercase tracking-wide text-amber-300/90 border border-amber-300/30 rounded px-1">
+                          Local
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-surface-500 truncate">{s.products.toLocaleString("es-AR")} productos publicados</p>
+                    </div>
+                    {canManage !== false ? (
+                      <button
+                        type="button"
+                        onClick={() => void connectRetail(s)}
+                        disabled={working !== null}
+                        className="flex flex-shrink-0 items-center gap-1 text-[11px] font-semibold bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white rounded-md px-2.5 py-1.5"
+                      >
+                        {working === `retail:${s.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Sumar
                       </button>
                     ) : (
                       <span className="flex-shrink-0 text-[11px] text-surface-500">Lo decide quien maneja los proveedores</span>

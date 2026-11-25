@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.30.3",
+    date: "2026-11-25",
+    title: "Los locales de venta, también en «Agregar proveedor»",
+    changes: [
+      {
+        kind: "improved",
+        text: "En «Agregar proveedor» ahora aparecen los locales de venta (los de HardGamers y Compra Gamer), marcados como «Local» para que no se confundan con un distribuidor. Los sumás desde ahí y te lleva a cargarle el descuento.",
+      },
+    ],
+  },
+  {
     version: "2.30.2",
     date: "2026-11-25",
     title: "Compra Gamer con fotos",
