@@ -748,7 +748,7 @@ export interface ListDiscounts {
 
 export const retailSuppliersApi = {
   list: (q?: string) => api.get<RetailStoreOption[]>("/my/retail-suppliers", { params: { q: q || undefined } }),
-  connect: (storeId: string) => api.post<{ provider: Provider; name: string }>(`/my/retail-suppliers/${storeId}`),
+  connect: (storeId: string) => api.post<{ provider: Provider; name: string; preparing: boolean }>(`/my/retail-suppliers/${storeId}`),
   disconnect: (storeId: string) => api.delete<{ ok: true }>(`/my/retail-suppliers/${storeId}`),
   /** Carrito del local con estos productos (solo Compra Gamer). `url: null` = ese local no lo permite. */
   cartLink: (provider: string, items: { externalId: string; qty: number }[]) =>

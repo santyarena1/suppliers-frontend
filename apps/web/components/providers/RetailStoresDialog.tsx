@@ -23,6 +23,7 @@ export default function RetailStoresDialog({ open, onClose, onChanged }: Props) 
   const [stores, setStores] = useState<RetailStoreOption[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -44,9 +45,17 @@ export default function RetailStoresDialog({ open, onClose, onChanged }: Props) 
   async function toggle(store: RetailStoreOption) {
     setBusy(store.id);
     setError(null);
+    setNotice(null);
     try {
       if (store.connected) await retailSuppliersApi.disconnect(store.id);
-      else await retailSuppliersApi.connect(store.id);
+      else {
+        const res = await retailSuppliersApi.connect(store.id);
+        setNotice(
+          res.data.preparing
+            ? `Listo. Estamos copiando el catálogo de ${store.name}: en un par de minutos lo ves en la búsqueda.`
+            : `Listo: ${store.name} ya está entre tus proveedores.`
+        );
+      }
       invalidateMyProviders();
       const res = await retailSuppliersApi.list(q);
       setStores(res.data);
@@ -88,6 +97,7 @@ export default function RetailStoresDialog({ open, onClose, onChanged }: Props) 
             />
           </div>
           {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+          {notice && <p className="text-xs text-emerald-400 mt-2">{notice}</p>}
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 pb-5">

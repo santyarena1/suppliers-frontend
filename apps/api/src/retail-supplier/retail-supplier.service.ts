@@ -84,20 +84,26 @@ export class RetailSupplierService {
     const store = await this.prisma.retailStore.findFirst({ where: { id: retailStoreId, active: true }, select: { id: true, name: true } });
     if (!store) throw new NotFoundException("Ese local ya no está disponible");
     const supplier = await this.ensureSupplier(store);
-    if (!supplier.syncedAt) await this.syncSupplier(supplier.id);
     await this.prisma.$transaction([
       this.prisma.tenantLink.upsert({
         where: { clientTenantId_supplierTenantId: { clientTenantId: tenant.tenantId, supplierTenantId: supplier.supplierTenantId } },
         create: { clientTenantId: tenant.tenantId, supplierTenantId: supplier.supplierTenantId, status: "LIST_CONNECTED" },
         update: { status: "LIST_CONNECTED" },
       }),
-      this.prisma.providerSyncConfig.createMany({
-        data: [{ tenantId: tenant.tenantId, provider: supplier.providerKey, enabled: false, priceChannel: "LIST", zeroStockAction: "HIDE" }],
-        skipDuplicates: true,
+      // El local no publica stock: solo lista lo que tiene. Ocultar «sin stock» lo escondería todo.
+      this.prisma.providerSyncConfig.upsert({
+        where: { tenantId_provider: { tenantId: tenant.tenantId, provider: supplier.providerKey } },
+        create: { tenantId: tenant.tenantId, provider: supplier.providerKey, enabled: false, priceChannel: "LIST", zeroStockAction: "KEEP" },
+        update: { zeroStockAction: "KEEP" },
       }),
     ]);
-    await this.providers.materializeBaseOffers(tenant.tenantId, supplier.providerKey as Provider);
-    return { provider: supplier.providerKey, name: supplier.name };
+    // La primera copia de un local grande tarda: corre aparte y el comercio sigue.
+    const provider = supplier.providerKey as Provider;
+    const work = supplier.syncedAt
+      ? this.providers.materializeBaseOffers(tenant.tenantId, provider)
+      : this.syncSupplier(supplier.id).then(() => this.materializeLinked(supplier.id));
+    void work.catch((err) => this.logger.warn(`Sumar ${provider} a ${tenant.tenantId}: ${msg(err)}`));
+    return { provider: supplier.providerKey, name: supplier.name, preparing: !supplier.syncedAt };
   }
 
   /** Deja de verlo como proveedor (el historial queda). */
