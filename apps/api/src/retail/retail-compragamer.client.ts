@@ -9,8 +9,8 @@ import axios, { type AxiosInstance } from "axios";
  * completo como un JSON estático, sin auth ni paginación: una sola petición
  * trae todo. Es la fuente más barata de las tres.
  *
- * Va sin imagen a propósito: su CDN contesta 403 a cualquier cliente que no sea
- * un navegador, y un link roto es peor que no tener foto.
+ * La foto sale de `imagenes[].nombre` (la de menor `orden`) en su CDN, en
+ * tamaño original: los sufijos que no existen contestan 403.
  */
 
 const DEFAULT_URL = "https://static.compragamer.com/productos";
@@ -25,8 +25,9 @@ interface CompragamerRaw {
   precioLista?: number | null;
   stock?: number | null;
   vendible?: number | null;
-  visible_solo_en_ATPC?: number | null;
-  visible_solo_en_combo?: number | null;
+  visible_solo_en_ATPC?: number | boolean | null;
+  visible_solo_en_combo?: number | boolean | null;
+  imagenes?: { nombre?: string | null; orden?: number | null }[] | null;
 }
 
 export interface CompragamerProduct {
@@ -36,6 +37,17 @@ export interface CompragamerProduct {
   name: string;
   price: number;
   inStock: boolean;
+  imageUrl: string | null;
+}
+
+const IMAGE_BASE = "https://imagenes.compragamer.com/productos/compragamer_Imganen_general_";
+
+/** Foto principal (la de menor `orden`), o null si no publica ninguna. */
+export function compragamerImageUrl(imagenes: CompragamerRaw["imagenes"]): string | null {
+  const first = (imagenes ?? [])
+    .filter((i) => typeof i?.nombre === "string" && i.nombre.trim())
+    .sort((a, b) => (a.orden ?? 99) - (b.orden ?? 99))[0];
+  return first ? `${IMAGE_BASE}${encodeURIComponent(first.nombre!.trim())}.jpg` : null;
 }
 
 @Injectable()
@@ -84,7 +96,8 @@ export class RetailCompragamerClient {
       if (!id || !name) continue;
       // Armados a medida y piezas que solo existen dentro de un combo no son
       // productos comparables: ensucian la referencia de mercado.
-      if (raw.visible_solo_en_ATPC === 1 || raw.visible_solo_en_combo === 1) continue;
+      // Vienen como booleano o como 0/1.
+      if (Number(raw.visible_solo_en_ATPC) === 1 || Number(raw.visible_solo_en_combo) === 1) continue;
 
       // El precio que el local publica como titular es el especial; el de lista
       // queda de respaldo. Elegimos el titular para no inflar el margen.
@@ -97,6 +110,7 @@ export class RetailCompragamerClient {
         name,
         price,
         inStock: Number(raw.stock ?? 0) > 0 && raw.vendible !== 0,
+        imageUrl: compragamerImageUrl(raw.imagenes),
       });
     }
     return out;

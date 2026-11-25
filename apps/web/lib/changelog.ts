@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.30.2",
+    date: "2026-11-25",
+    title: "Compra Gamer con fotos",
+    changes: [
+      {
+        kind: "fixed",
+        text: "Los productos de Compra Gamer ahora muestran su foto en la búsqueda y en la ficha.",
+      },
+    ],
+  },
+  {
     version: "2.30.1",
     date: "2026-11-25",
     title: "Los locales sumados muestran todo su catálogo",

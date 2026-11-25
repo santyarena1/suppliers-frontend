@@ -1,3 +1,4 @@
+import { compragamerImageUrl } from "../retail/retail-compragamer.client";
 import { listDiscountKey, listDiscountPercent, NO_RULES, type OfferRules } from "../providers/catalog-view";
 import { compragamerCartUrl } from "./retail-supplier.service";
 
@@ -39,5 +40,20 @@ describe("Carrito de Compra Gamer por link", () => {
   it("sin id de algún producto no arma un carrito incompleto", () => {
     expect(compragamerCartUrl([{ compragamerId: 1, qty: 1 }, { compragamerId: null, qty: 1 }])).toBeNull();
     expect(compragamerCartUrl([])).toBeNull();
+  });
+});
+
+describe("compragamerImageUrl", () => {
+  it("usa la foto de menor orden en tamaño original", () => {
+    expect(
+      compragamerImageUrl([
+        { nombre: "1228_Estab_240ffe5a", orden: 2 },
+        { nombre: "1226_Estab_63a535eb", orden: 1 },
+      ])
+    ).toBe("https://imagenes.compragamer.com/productos/compragamer_Imganen_general_1226_Estab_63a535eb.jpg");
+  });
+  it("sin fotos devuelve null", () => {
+    expect(compragamerImageUrl([])).toBeNull();
+    expect(compragamerImageUrl(undefined)).toBeNull();
   });
 });
