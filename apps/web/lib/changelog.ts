@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.32.0",
+    date: "2026-11-26",
+    title: "Solo precios confirmados: lo desactualizado deja de mostrarse",
+    changes: [
+      {
+        kind: "improved",
+        text: "Un producto de un distribuidor cuyo precio no se confirmó en las últimas sincronizaciones (portal caído, cuenta pausada, sincronización cortada) deja de mostrarse hasta que vuelva a llegar. Como mucho espera 48 horas, y nunca menos de 12 para cubrir la noche.",
+      },
+      {
+        kind: "improved",
+        text: "Los locales sumados como proveedor solo muestran lo que el local publicó en las últimas 24 horas, igual que la búsqueda de locales.",
+      },
+    ],
+  },
+  {
     version: "2.31.2",
     date: "2026-11-26",
     title: "Compra Gamer: solo lo que está publicado hoy",

@@ -8,6 +8,7 @@ import { ProvidersService } from "../providers/providers.service";
 import type { NormalizedProduct } from "../providers/types";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
+import { RETAIL_FRESH_MS } from "../retail/retail-search.service";
 
 /** IVA con el que se separa el neto del precio publicado (los locales publican con IVA). */
 const MAX_DISCOUNT = 90;
@@ -27,6 +28,9 @@ export interface DiscountRuleInput {
  * copia como lista base; cada comercio que lo elige ve esa lista con sus propios
  * descuentos (general en el vínculo, por categoría o marca en ListDiscountRule).
  */
+/** Cada cuánto se recopia un local aunque no haya cambiado nada. */
+const RECOPY_MS = 3 * 60 * 60_000;
+
 @Injectable()
 export class RetailSupplierService {
   private readonly logger = new Logger(RetailSupplierService.name);
@@ -205,7 +209,9 @@ export class RetailSupplierService {
           where: { storeId: s.retailStoreId, ...(s.syncedAt ? { updatedAt: { gt: s.syncedAt } } : {}) },
           select: { id: true },
         });
-        if (!changed) continue;
+        // Aunque el local no cambie, se vuelve a copiar cada tanto: así sale lo que se venció.
+        const due = !s.syncedAt || Date.now() - s.syncedAt.getTime() > RECOPY_MS;
+        if (!changed && !due) continue;
         try {
           await this.syncSupplier(s.id);
           await this.materializeLinked(s.id);
@@ -234,7 +240,8 @@ export class RetailSupplierService {
     const startedAt = new Date();
     await this.syncLogo(provider, supplier.retailStore.logoUrl);
     const products = await this.prisma.retailProduct.findMany({
-      where: { storeId: supplier.retailStoreId, active: true },
+      // Lo que el local no volvió a publicar en 24 h no se copia: su precio ya no está confirmado.
+      where: { storeId: supplier.retailStoreId, active: true, syncedAt: { gte: new Date(Date.now() - RETAIL_FRESH_MS) } },
       select: { externalId: true, name: true, price: true, currency: true, productUrl: true, imageUrl: true, categoryName: true, raw: true },
     });
     const items: NormalizedProduct[] = products.flatMap((p) => {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import type { Provider } from "@nodo/shared";
-import { shouldRunScheduledJob } from "../common/cron-window";
+import { cronsAreGloballyEnabled, shouldRunScheduledJob } from "../common/cron-window";
 import { ProvidersService } from "./providers.service";
 
 /** Cada 30 minutos (06:00–23:00 AR): sincroniza los proveedores habilitados
@@ -40,6 +40,18 @@ export class SyncSchedulerService {
       }
     } finally {
       this.running = false;
+    }
+  }
+
+  /** Cada hora, también de noche: ningún precio por API sin confirmar queda a la vista. */
+  @Cron("50 * * * *")
+  async hideUnconfirmed() {
+    if (!cronsAreGloballyEnabled()) return;
+    try {
+      const n = await this.providersService.hideUnconfirmedOffers();
+      if (n > 0) this.logger.log(`Precios sin confirmar: ${n} productos ocultos`);
+    } catch (err) {
+      this.logger.warn(`Ocultar precios sin confirmar falló: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

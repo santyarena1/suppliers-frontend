@@ -10,6 +10,12 @@ export const SYNC_MAX_FAILURES = 3;
 export const SYNC_BACKOFF_CAP_MS = 2 * 60 * 60_000;
 /** Precios por API más viejos que esto se marcan desactualizados aunque el intervalo sea largo. */
 export const PRICES_STALE_FLOOR_MS = 48 * 60 * 60_000;
+/**
+ * Un producto por API que ninguna sincronización volvió a traer en este tiempo
+ * deja de mostrarse: su precio ya no está confirmado. Nunca menos de 12 h, que
+ * cubre la noche sin crons (23 a 6).
+ */
+export const OFFER_MIN_AGE_MS = 12 * 60 * 60_000;
 
 export interface SyncSchedule {
   /** Con el distribuidor se aplica su intervalo mínimo (provider-rate-limits). */
@@ -71,6 +77,12 @@ export function pricesAreStale(
   const byInterval = config.enabled ? minutes * 60_000 * 2 : PRICES_STALE_FLOOR_MS;
   const limit = Math.max(Math.min(byInterval, PRICES_STALE_FLOOR_MS), 2 * 60 * 60_000);
   return now.getTime() - config.lastSyncedAt.getTime() > limit;
+}
+
+/** Hasta cuándo vale un precio por API sin volver a verlo: dos intervalos, entre 12 h y 48 h. */
+export function offerMaxAgeMs(config: { provider?: string; syncIntervalMinutes: number; officialApi?: boolean }): number {
+  const minutes = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes, { officialApi: config.officialApi });
+  return Math.min(Math.max(minutes * 60_000 * 2, OFFER_MIN_AGE_MS), PRICES_STALE_FLOOR_MS);
 }
 
 /** El error técnico del portal, en criollo para el comercio. */

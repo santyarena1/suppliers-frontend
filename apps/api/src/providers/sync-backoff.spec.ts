@@ -1,4 +1,4 @@
-import { SYNC_BACKOFF_CAP_MS, isSyncDue, nextSyncAt, pricesAreStale, syncFailureReason } from "./sync-backoff";
+import { SYNC_BACKOFF_CAP_MS, isSyncDue, nextSyncAt, offerMaxAgeMs, pricesAreStale, syncFailureReason } from "./sync-backoff";
 
 const HOUR = 60 * 60_000;
 const base = {
@@ -110,5 +110,18 @@ describe("syncFailureReason", () => {
     ["algo raro", /La sincronización falló: algo raro/],
   ])("%s", (message, expected) => {
     expect(syncFailureReason(message)).toMatch(expected);
+  });
+});
+
+describe("offerMaxAgeMs", () => {
+  const H = 60 * 60_000;
+  it("cubre la noche sin crons aunque el intervalo sea corto", () => {
+    expect(offerMaxAgeMs({ provider: "ELIT", syncIntervalMinutes: 60 })).toBe(12 * H);
+  });
+  it("dos intervalos cuando el intervalo es largo", () => {
+    expect(offerMaxAgeMs({ provider: "ELIT", syncIntervalMinutes: 10 * 60 })).toBe(20 * H);
+  });
+  it("nunca más de 48 h", () => {
+    expect(offerMaxAgeMs({ provider: "ELIT", syncIntervalMinutes: 7 * 24 * 60 })).toBe(48 * H);
   });
 });

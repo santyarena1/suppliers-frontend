@@ -54,7 +54,7 @@ import {
   type CatalogSyncProgress,
   type CatalogSyncSource,
 } from "./catalog-sync-progress";
-import { SYNC_MAX_FAILURES, isSyncDue, pricesAreStale, syncFailureReason } from "./sync-backoff";
+import { PRICES_STALE_FLOOR_MS, SYNC_MAX_FAILURES, isSyncDue, offerMaxAgeMs, pricesAreStale, syncFailureReason } from "./sync-backoff";
 import { manualSyncWaitMinutes, minSyncMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
 import { hasSolutionBoxOfficialApi } from "./solution-box-api-client";
 
@@ -2571,6 +2571,36 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /** Usado por el cron de sincronización automática. */
+  /**
+   * Oculta los productos por API cuyo precio ninguna sincronización confirmó a
+   * tiempo (portal caído, cuenta pausada, sync cortada). Vuelven solos en la
+   * próxima sincronización que los traiga. Las listas y los precios propios no
+   * entran: su vigencia es la de la planilla.
+   */
+  async hideUnconfirmedOffers(now = new Date()): Promise<number> {
+    const configs = await this.prisma.providerSyncConfig.findMany({
+      where: { priceChannel: "API" },
+      select: { tenantId: true, provider: true, syncIntervalMinutes: true },
+    });
+    let hidden = 0;
+    for (const c of configs) {
+      const officialApi = await this.solutionBoxUsesOfficialApi(c);
+      const limit = offerMaxAgeMs({ provider: c.provider, syncIntervalMinutes: c.syncIntervalMinutes, officialApi });
+      const res = await this.prisma.tenantProductOffer.updateMany({
+        where: { tenantId: c.tenantId, provider: c.provider, source: "SYNC", active: true, syncedAt: { lt: new Date(now.getTime() - limit) } },
+        data: { active: false },
+      });
+      if (res.count) this.logger.log(`${c.provider} (${c.tenantId}): ${res.count} productos sin precio confirmado, ocultos`);
+      hidden += res.count;
+    }
+    // Lo que quedó de un proveedor sin configuración (o pasado a lista): nada lo confirma.
+    const orphan = await this.prisma.tenantProductOffer.updateMany({
+      where: { source: "SYNC", active: true, syncedAt: { lt: new Date(now.getTime() - PRICES_STALE_FLOOR_MS) } },
+      data: { active: false },
+    });
+    return hidden + orphan.count;
+  }
+
   async findDueConfigs() {
     // Los comercios que reciben precios por lista no sincronizan por API.
     const configs = await this.prisma.providerSyncConfig.findMany({
