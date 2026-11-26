@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import {
   grupoNucleoCheckoutApi,
   GnCheckoutPreview,
@@ -100,6 +101,7 @@ export default function GrupoNucleoCheckoutPanel({
       setProvinces(warm.data.provinces);
       setDocTypes(warm.data.documentTypes.map((d) => ({ value: String(d.value), label: d.label })));
       setPreview(warm.data.preview);
+      setNotes((current) => current || remembered(lastCheckoutChoices("GRUPO_NUCLEO"), "notes", ""));
       setError(null);
       setLoading(false);
       return;
@@ -133,6 +135,7 @@ export default function GrupoNucleoCheckoutPanel({
         background: true,
       });
       acceptResult(res.data);
+      rememberCheckoutChoices("GRUPO_NUCLEO", { notes: notes.trim() });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Grupo Núcleo"));
     } finally {

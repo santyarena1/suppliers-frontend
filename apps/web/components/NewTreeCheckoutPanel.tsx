@@ -2,6 +2,7 @@
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import Link from "next/link";
 import { newTreeCheckoutApi, NewTreeCheckoutPreview, NewTreeDraftResult } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
@@ -73,6 +74,9 @@ export default function NewTreeCheckoutPanel({
     if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
       seeded.current = cartKey;
       publishPreview(warm.data.preview);
+      const last = lastCheckoutChoices("NEW_TREE");
+      setDeliveryAddress((current) => current || remembered(last, "deliveryAddress", ""));
+      setNotes((current) => current || remembered(last, "notes", ""));
       setError(null);
       setLoading(false);
       return;
@@ -109,6 +113,7 @@ export default function NewTreeCheckoutPanel({
     try {
       const res = await newTreeCheckoutApi.draft({ ...payload(), background: true });
       acceptResult(res.data);
+      rememberCheckoutChoices("NEW_TREE", { deliveryAddress: deliveryAddress.trim(), notes: notes.trim() });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en New Tree"));
     } finally {

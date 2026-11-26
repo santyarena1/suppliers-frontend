@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import { airCheckoutApi, AirDraftResult, ProviderOption } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
 import Link from "next/link";
@@ -90,10 +91,14 @@ export default function AirCheckoutPanel({
       setPagos(d.pagos);
       setEntregas(d.entregas);
       setTransportes(d.transportes);
-      setSucursal(d.sucursal);
-      setVendedor(d.vendedor);
-      setPago(d.pago);
-      setEntrega(d.entrega);
+      // Lo del último pedido a Air, si sigue siendo una opción válida.
+      const last = lastCheckoutChoices("AIR");
+      setSucursal(remembered(last, "sucursal", d.sucursal, (d.sucursales ?? []).map((o) => o.value)));
+      setVendedor(remembered(last, "vendedor", d.vendedor, (d.vendedores ?? []).map((o) => o.value)));
+      setPago(remembered(last, "pago", d.pago, (d.pagos ?? []).map((o) => o.value)));
+      setEntrega(remembered(last, "entrega", d.entrega, (d.entregas ?? []).map((o) => o.value)));
+      setTransporte(remembered(last, "transporte", "", (d.transportes ?? []).map((o) => o.value)));
+      setNotes(remembered(last, "notes", ""));
       setError(null);
       setLoading(false);
       // Lo que cambió en el canasto de la cuenta de Air se refleja acá.
@@ -134,6 +139,7 @@ export default function AirCheckoutPanel({
         background: true,
       });
       acceptResult(res.data);
+      rememberCheckoutChoices("AIR", { sucursal, vendedor, pago, entrega, transporte, notes: notes.trim() });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo enviar el pedido en Air"));
     } finally {

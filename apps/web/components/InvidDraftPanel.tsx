@@ -2,6 +2,7 @@
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import {
   invidCheckoutApi,
   InvidAddress,
@@ -49,6 +50,7 @@ export default function InvidDraftPanel({
   const [deliveryOption, setDeliveryOption] = useState("1");
   const [expresoId, setExpresoId] = useState("");
   const [notes, setNotes] = useState("");
+  const reviewRemembered = useRef(false);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [metaError, setMetaError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -130,11 +132,25 @@ export default function InvidDraftPanel({
       setPayments(d.payments);
       setDeliveries(d.deliveries);
       setExpresoCompanies(d.expresoCompanies);
-      setAddressId(d.addressId);
-      setPaymentOption(d.paymentOption);
-      setDeliveryOption(d.deliveryOption);
-      reviewedOnce.current = true;
-      publishPreview(d.preview);
+      const last = lastCheckoutChoices("INVID");
+      const addr = remembered(last, "addressId", d.addressId, d.addresses.map((a) => a.id));
+      const pay = remembered(last, "paymentOption", d.paymentOption, d.payments.map((o) => o.value));
+      const del = remembered(last, "deliveryOption", d.deliveryOption, d.deliveries.map((o) => o.value));
+      const expreso = remembered(last, "expresoId", "", d.expresoCompanies.map((o) => o.value));
+      setAddressId(addr);
+      setPaymentOption(pay);
+      setDeliveryOption(del);
+      setExpresoId(expreso);
+      setNotes((current) => current || remembered(last, "notes", ""));
+      if (addr === d.addressId && pay === d.paymentOption && del === d.deliveryOption && !(del === "3" && expreso)) {
+        reviewedOnce.current = true;
+        publishPreview(d.preview);
+      } else {
+        // El portal cotizó con sus opciones por defecto: se vuelve a revisar con las del último pedido.
+        reviewedOnce.current = false;
+        publishPreview(null);
+        reviewRemembered.current = true;
+      }
       setMetaError(null);
       setLoadingMeta(false);
       return;
@@ -150,6 +166,14 @@ export default function InvidDraftPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warm, itemsKey]);
+
+  useEffect(() => {
+    if (!reviewRemembered.current || loadingMeta) return;
+    reviewRemembered.current = false;
+    void handlePreview();
+    // corre con el estado ya sembrado (dirección, pago, entrega)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadingMeta, addressId, paymentOption, deliveryOption, expresoId]);
 
   function invalidatePreview() {
     setError(null);
@@ -243,6 +267,13 @@ export default function InvidDraftPanel({
         expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
         notes: notes.trim() || undefined,
         background: true,
+      });
+      rememberCheckoutChoices("INVID", {
+        addressId,
+        paymentOption,
+        deliveryOption,
+        expresoId: deliveryOption === "3" ? expresoId : "",
+        notes: notes.trim(),
       });
       trackPendingOrder({
         id: res.data.id,

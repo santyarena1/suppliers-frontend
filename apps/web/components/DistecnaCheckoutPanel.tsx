@@ -2,6 +2,7 @@
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import Link from "next/link";
 import { distecnaCheckoutApi, DistecnaCheckoutPreview, DistecnaDraftResult } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
@@ -71,7 +72,12 @@ export default function DistecnaCheckoutPanel({
       const data = warm.data.preview;
       publishPreview(data);
       setPaymentTermId(data.paymentTermId ?? data.paymentTerm?.id ?? "");
-      setDeliveryAddressId(data.deliveryAddressId ?? data.addresses[0]?.id ?? "");
+      setDeliveryAddressId(
+        remembered(lastCheckoutChoices("DISTECNA"), "deliveryAddressId", data.deliveryAddressId ?? data.addresses[0]?.id ?? "", [
+          "",
+          ...data.addresses.map((a) => a.id),
+        ])
+      );
       setError(null);
       setLoading(false);
       return;
@@ -109,6 +115,7 @@ export default function DistecnaCheckoutPanel({
     try {
       const res = await distecnaCheckoutApi.draft({ ...payload(), background: true });
       acceptResult(res.data);
+      rememberCheckoutChoices("DISTECNA", { deliveryAddressId });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Distecna"));
     } finally {

@@ -2,6 +2,7 @@
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import {
   newBytesCheckoutApi,
   NewBytesAddress,
@@ -111,7 +112,16 @@ export default function NewBytesDraftPanel({
       // mostrar el precio por forma de pago sin tener que abrir el carrito.
       rememberPaymentOptions("NEW_BYTES", pays);
       const def = addrs.find((a) => a.isDefault) ?? addrs[0];
-      if (def) setAddressId(def.id);
+      // Lo del último pedido a New Bytes, si sigue siendo una opción válida.
+      const last = lastCheckoutChoices("NEW_BYTES");
+      const addr = remembered(last, "addressId", def?.id ?? "", addrs.map((a) => a.id));
+      if (addr) setAddressId(addr);
+      setDelivery(remembered(last, "delivery", "pickup", ["pickup", "shipping"]) as Delivery);
+      const pay = remembered(last, "medioDePagoId", "", pays.map((o) => o.value));
+      if (pay) setMedioDePagoId(pay);
+      // El envío se cotiza después: si la cotización trae el mismo medio, queda elegido.
+      setMedioDeEnvioId(remembered(last, "medioDeEnvioId", ""));
+      setNotes((current) => current || remembered(last, "notes", ""));
       setMetaError(null);
       setLoadingMeta(false);
       onPreviewed?.({
@@ -260,6 +270,13 @@ export default function NewBytesDraftPanel({
     setSubmitting(true);
     try {
       const res = await newBytesCheckoutApi.draft(checkoutPayload());
+      rememberCheckoutChoices("NEW_BYTES", {
+        delivery,
+        addressId,
+        medioDePagoId,
+        medioDeEnvioId: delivery === "shipping" ? medioDeEnvioId : "",
+        notes: notes.trim(),
+      });
       trackPendingOrder({
         id: res.data.id,
         provider: "NEW_BYTES",

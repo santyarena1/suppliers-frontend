@@ -2,6 +2,7 @@
 
 import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import Link from "next/link";
 import { polytechCheckoutApi, PolytechCheckoutPreview, PolytechDraftResult } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
@@ -73,10 +74,12 @@ export default function PolytechCheckoutPanel({
       seeded.current = cartKey;
       const data = warm.data.preview;
       publishPreview(data);
-      setShippingService(data.shippingService);
-      setAddressId(data.addressId ?? data.addresses[0]?.id ?? "");
-      setCourierId(data.courierId ?? data.couriers[0]?.id ?? "");
-      setPaymentMethod(data.paymentMethod ?? "");
+      const last = lastCheckoutChoices("POLYTECH");
+      setShippingService(remembered(last, "shippingService", data.shippingService, ["delivery", "pickup"]) === "pickup" ? "pickup" : "delivery");
+      setAddressId(remembered(last, "addressId", data.addressId ?? data.addresses[0]?.id ?? "", data.addresses.map((a) => a.id)));
+      setCourierId(remembered(last, "courierId", data.courierId ?? data.couriers[0]?.id ?? "", data.couriers.map((c) => c.id)));
+      setPaymentMethod(remembered(last, "paymentMethod", data.paymentMethod ?? "", ["", "mercadopago"]) === "mercadopago" ? "mercadopago" : "");
+      setNotes((current) => current || remembered(last, "notes", ""));
       setError(null);
       setLoading(false);
       return;
@@ -112,6 +115,7 @@ export default function PolytechCheckoutPanel({
     try {
       const res = await polytechCheckoutApi.draft({ ...payload(), background: true });
       acceptResult(res.data);
+      rememberCheckoutChoices("POLYTECH", { shippingService, addressId, courierId, paymentMethod, notes: notes.trim() });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Polytech"));
     } finally {

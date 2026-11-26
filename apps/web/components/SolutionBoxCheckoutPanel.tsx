@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import Link from "next/link";
 import { solutionBoxCheckoutApi, SolutionBoxCheckoutPreview, SolutionBoxDraftResult } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
@@ -71,8 +72,11 @@ export default function SolutionBoxCheckoutPanel({
       seeded.current = cartKey;
       const data = warm.data.preview;
       publishPreview(data);
-      setPaymentCondition(data.paymentCondition ?? data.paymentConditions[0]?.value ?? "");
-      setDeliveryType(data.deliveryType ?? "1");
+      const last = lastCheckoutChoices("SOLUTION_BOX");
+      setPaymentCondition(
+        remembered(last, "paymentCondition", data.paymentCondition ?? data.paymentConditions[0]?.value ?? "", data.paymentConditions.map((c) => c.value))
+      );
+      setDeliveryType(remembered(last, "deliveryType", data.deliveryType ?? "1", data.deliveryTypes.map((d) => d.value)));
       setError(null);
       setLoading(false);
       hydrated.current = true;
@@ -127,6 +131,7 @@ export default function SolutionBoxCheckoutPanel({
     try {
       const res = await solutionBoxCheckoutApi.draft({ ...payload(), background: true });
       acceptResult(res.data);
+      rememberCheckoutChoices("SOLUTION_BOX", { paymentCondition, deliveryType });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Solution Box"));
     } finally {

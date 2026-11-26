@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.33.0",
+    date: "2026-11-26",
+    title: "El carrito recuerda las opciones de tu último pedido",
+    changes: [
+      {
+        kind: "new",
+        text: "Al confirmar en Air, Elit, Invid, New Bytes, Polytech, Distecna, Solution Box, New Tree o Grupo Núcleo, el próximo pedido a ese distribuidor ya viene con lo mismo elegido: vendedor, sucursal, depósito, dirección, forma de pago, entrega, transporte y observaciones. Si alguna opción ya no existe en el portal, queda la que propone el distribuidor.",
+      },
+    ],
+  },
+  {
     version: "2.32.0",
     date: "2026-11-26",
     title: "Solo precios confirmados: lo desactualizado deja de mostrarse",

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { lastCheckoutChoices, rememberCheckoutChoices, remembered } from "@/lib/checkoutMemory";
 import {
   elitCheckoutApi,
   ElitCheckoutPreview,
@@ -114,10 +115,21 @@ export default function ElitCheckoutPanel({
       seeded.current = cartKey;
       const data = warm.data.preview;
       publishPreview(data);
-      setWarehouse(String(data.warehouse ?? data.warehouses[0]?.id ?? ""));
-      setShippingMethod(data.shippingMethod ?? "");
-      setSaleCondition(data.saleCondition ?? "");
-      setShippingAddress(data.shippingAddress ?? data.addresses[0]?.code ?? "");
+      // Lo del último pedido a Elit, si sigue siendo una opción válida (el
+      // cambio dispara la recotización de abajo).
+      const last = lastCheckoutChoices("ELIT");
+      const wh = remembered(last, "warehouse", String(data.warehouse ?? data.warehouses[0]?.id ?? ""), data.warehouses.map((w) => w.id));
+      setWarehouse(wh);
+      setShippingMethod(
+        remembered(
+          last,
+          "shippingMethod",
+          data.shippingMethod ?? "",
+          (data.shippingMethods ?? []).filter((m) => String(m.warehouse) === wh).map((m) => m.value)
+        )
+      );
+      setSaleCondition(remembered(last, "saleCondition", data.saleCondition ?? "", data.saleConditions.map((c) => c.value)));
+      setShippingAddress(remembered(last, "shippingAddress", data.shippingAddress ?? data.addresses[0]?.code ?? "", data.addresses.map((a) => a.code)));
       setError(null);
       setLoading(false);
       hydrated.current = true;
@@ -228,6 +240,7 @@ export default function ElitCheckoutPanel({
     try {
       const res = await elitCheckoutApi.draft({ ...payload(), background: true });
       acceptResult(res.data);
+      rememberCheckoutChoices("ELIT", { warehouse, shippingMethod: selectedShip?.value ?? shippingMethod, saleCondition, shippingAddress });
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Elit"));
       const missing = noStockFromError(err);
