@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.31.2",
+    date: "2026-11-26",
+    title: "Compra Gamer: solo lo que está publicado hoy",
+    changes: [
+      {
+        kind: "fixed",
+        text: "Los productos que Compra Gamer dejó de vender ya no aparecen. Quedaban con precio viejo, sin foto, y con ellos en el carrito no salía el botón «Armar carrito en Compra Gamer».",
+      },
+    ],
+  },
+  {
     version: "2.31.1",
     date: "2026-11-25",
     title: "Los locales sumados muestran su logo en todo NODO",

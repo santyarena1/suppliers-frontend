@@ -58,6 +58,9 @@ async function mapPool<T>(
   await Promise.all(workers);
 }
 
+/** Por debajo de esto el JSON de Compra Gamer vino cortado: no se da de baja lo que falta. */
+const COMPRAGAMER_MIN_FULL_CATALOG = 500;
+
 @Injectable()
 export class RetailIngestService implements OnModuleInit {
   private readonly logger = new Logger(RetailIngestService.name);
@@ -196,6 +199,7 @@ export class RetailIngestService implements OnModuleInit {
       select: { id: true },
     });
 
+    const passStart = new Date();
     let n = 0;
     for (const item of catalog) {
       const productExternalId = hardgamersExternalId(item.externalKey);
@@ -246,11 +250,22 @@ export class RetailIngestService implements OnModuleInit {
       n += 1;
     }
 
+    // El JSON es el catálogo entero: lo que ya no trae deja de aparecer. Si no,
+    // quedaban productos viejos con su precio de entonces, sin foto y sin el id
+    // que arma el carrito. Con un catálogo sospechosamente chico no se da de baja nada.
+    let gone = 0;
+    if (catalog.length >= COMPRAGAMER_MIN_FULL_CATALOG) {
+      const res = await this.prisma.retailProduct.updateMany({
+        where: { storeId: store.id, active: true, syncedAt: { lt: passStart } },
+        data: { active: false },
+      });
+      gone = res.count;
+    }
     await this.prisma.retailStore.update({
       where: { id: store.id },
       data: { syncedAt: new Date() },
     });
-    this.logger.log("Compra Gamer: " + n + " productos de " + catalog.length);
+    this.logger.log("Compra Gamer: " + n + " productos de " + catalog.length + (gone ? ", " + gone + " dados de baja" : ""));
     return { productos: n, total: catalog.length };
   }
 
